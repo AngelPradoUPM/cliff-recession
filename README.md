@@ -9,7 +9,8 @@ marea (lago Erie), de R. Castedo (UPM). La tesis doctoral relacionada está en
 | Fichero | Descripción |
 |---|---|
 | `Great_lake_v.1.f90` | Código original en Fortran (Intel Visual Fortran). |
-| `great_lake.py` | Traducción a Python del código Fortran. |
+| `great_lake.py` | Traducción a Python del código Fortran (motor de cálculo). |
+| `great_lake_gui.py` | Herramienta gráfica de escritorio sobre `great_lake.py`. |
 | `ejemplos/caso_base/data.dat` | Caso base: 1260 meses, sin playa, terreno saturado, un estrato. |
 | `ejemplos/caso_simple/data.dat` | Caso simple de comprobación: 10 años, con playa, nivel freático, dos estratos y un punto de estudio. |
 | `tools/restore_fortran.py` | Adapta el `.f90` para compilarlo con gfortran (cambios mínimos de sintaxis). |
@@ -27,6 +28,37 @@ python great_lake.py ejemplos/caso_simple
 Lee `data.dat` del directorio indicado y escribe allí `timerecesion.out`,
 `Matriz_dibujo.out`, `Matriz_roturas.out`, `Matriz_recesion.out` y
 `Matriz_seepage.out`, con el mismo formato que el programa Fortran.
+
+## Herramienta gráfica
+
+```bash
+pip install -r requirements.txt
+python great_lake_gui.py ejemplos/caso_simple/data.dat
+```
+
+![Herramienta gráfica con el caso base](docs/captura_gui.png)
+
+- **Panel «Datos»** (izquierda):
+  - edición del perfil inicial (cota, distancia y tipo de punto);
+  - edición de los parámetros y de los estratos;
+  - lista de los perfiles de salida, con casillas «Ver».
+- **Vista central**: el perfil con el nivel del lago, el nivel freático y los
+  puntos singulares. Se actualiza al editar los datos. Tras calcular, muestra
+  los perfiles en cada instante de salida (escala de color por año). Tiene dos
+  vistas, «Acantilado» y «Perfil completo», y zoom con la barra de matplotlib.
+- **Pestañas de la derecha**:
+  - *Recesión*: gráficas de retroceso y de volumen, que se pueden exportar a
+    PNG o CSV.
+  - *Roturas*: el perfil antes y después de cada rotura.
+  - *Oleaje*: tabla editable del oleaje por estación. Por defecto tiene los
+    valores del código original; si se modifica, los resultados dejan de
+    coincidir con el Fortran.
+  - *Nivel / mareas*: carga y representación de una serie de niveles. Solo se
+    visualiza; el modelo usa un nivel del lago constante.
+- **Calcular**: se ejecuta en segundo plano, con barra de progreso y botón
+  para detener. Los ficheros de salida se guardan en la carpeta `resultados/`,
+  junto al `data.dat`. Los resultados son idénticos a los de `great_lake.py`
+  por línea de órdenes.
 
 ## Verificación
 

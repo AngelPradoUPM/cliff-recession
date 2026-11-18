@@ -151,9 +151,14 @@ SEASONS = {
 }
 
 
-def set_waves(season):
-    """Devuelve Waves, H, T, L, WF, Wn (vectores con indice desde 1)."""
-    Hs, Ts, WFs = SEASONS[season]
+def set_waves(season, seasons=None):
+    """Devuelve Waves, H, T, L, WF, Wn (vectores con indice desde 1).
+
+    ``seasons`` permite sustituir la tabla SEASONS (oleaje por estacion:
+    alturas H [m], periodos T [s] y frecuencias WF [%]). Por defecto se usan
+    los valores del codigo original.
+    """
+    Hs, Ts, WFs = (seasons or SEASONS)[season]
     waves = len(Hs)
     H = np.array([0.0] + [f32(v) for v in Hs], dtype=F64)
     T = np.array([0.0] + [f32(v) for v in Ts], dtype=F64)
@@ -236,38 +241,66 @@ def read_data(path):
     return d
 
 
+def _num(x):
+    x = float(x)
+    if x == int(x) and abs(x) < 1e15:
+        return f"{x:.1f}"
+    return repr(x)
+
+
+def write_data(path, d):
+    """Escribe un data.dat con el formato que espera el programa."""
+    L = ["Data entry for Great_lake_v.", "Enter run number", str(int(d["rn"])),
+         "Units of simulation time (1:months; 2:years)_integer", str(int(d["Utsim"])),
+         "Simulation time", str(int(d["tsim"])),
+         "Units per result output (1:months; 2:years)_integer", str(int(d["UTdib"])),
+         "Result output time", str(int(d["Tdib"])),
+         "Vertical discretization size (m)", _num(d["Dz"]),
+         "Tidal level (m above/below[in negative] zero)", str(int(d["lakelevel"])),
+         "Sand amount (m3/m)", _num(d["Qb"]),
+         "Sand grain diameter (m)", _num(d["Gs"]),
+         "Groundwater (0:no; 1:yes; 2: fully saturated); Groundwater depth landward (m)",
+         f"{int(d['groundwater'])},{_num(d['profagua'])}",
+         "Number of geological layers (from top to bottom)", str(int(d["ndatosresis"])),
+         "Clay erosion treshold value [0.5-20 Pa]; Coef. for shear stress [Kss]; Calibration coef. [p]",
+         f"{_num(d['SFmin'])} {_num(d['Kss'])} {_num(d['p'])}",
+         "Threshold surf force [50-500 Kg/m^2]; Coef. for bluff erosion [MMM]",
+         f"{_num(d['WFmin'])} {_num(d['MMM'])}",
+         "Treshold run-up distance; Coef. for run-up [Cb]; Coef. for Rs to shear [KRs]; Beach material factor [Bmat]",
+         f"{_num(d['Rsc'])} {_num(d['Cb'])} {_num(d['KRs'])} {_num(d['Bmat'])}",
+         "UCS (KPa); Shear strength (KPa); Effective cohesion (KPa); Effective friction angle (deg); "
+         "Unit weight (KN/m**3); Strata depth (m)"]
+    names = ["sigmac", "Shearstrength", "Ecohesion", "Ephi", "pesounit", "potestrato"]
+    for i in range(1, int(d["ndatosresis"]) + 1):
+        L.append(" ".join(_num(d[nm][i]) for nm in names))
+    L += ["Debris Mobility Coeff. (m**2/day)", _num(d["Mf"]),
+          "Bluff initial profile (m) [1:Study point; 2:Talus wedge; 3:Seepage point; "
+          "4:Talus base point => roturanotch]"]
+    for a, b, c in d["Pzy"]:
+        L.append(f"{_num(a)} {_num(b)} {_num(c)}")
+    with open(path, "w", encoding="latin-1") as fh:
+        fh.write("\n".join(L) + "\n")
+
+
 # ---------------------------------------------------------------------------
 # Programa principal
 # ---------------------------------------------------------------------------
-def run(workdir=".", verbose=True):
-    tic = time.process_time()
-    d = read_data(os.path.join(workdir, "data.dat"))
+def prepare_profile(Pzy_points, Dz, lakelevel):
+    """Discretiza el perfil inicial y localiza los puntos singulares.
 
-    rn = d["rn"]; Utsim = d["Utsim"]; tsim = d["tsim"]; UTdib = d["UTdib"]
-    Tdib = d["Tdib"]; Dz = d["Dz"]; lakelevel = d["lakelevel"]; Qb = d["Qb"]
-    Gs = d["Gs"]; groundwater = d["groundwater"]; Profagua = d["profagua"]
-    SFmin = d["SFmin"]; Kss = d["Kss"]; p = d["p"]; WFmin = d["WFmin"]
-    MMM = d["MMM"]; Rsc = d["Rsc"]; Cb = d["Cb"]; KRs = d["KRs"]; Bmat = d["Bmat"]
-    Shearstrength = d["Shearstrength"]; Ecohesion = d["Ecohesion"]
-    Ephi = d["Ephi"]; pesounit = d["pesounit"]; potestrato = d["potestrato"]
-    ndatosresis = d["ndatosresis"]; Mf = d["Mf"]
-
-    if verbose:
-        print("Great_lake_v.1 - Bluff clay lakes profiles recesion")
-
+    Devuelve un diccionario con el perfil discretizado ``P`` (P[1,k] cota,
+    P[2,k] posicion, k = 1..N) y los indices de los puntos: ``TL`` (nivel del
+    lago), ``zerolevel``, ``crestatalud``, ``seepagelevel``, ``roturanotch`` y
+    ``label`` (puntos de estudio).
+    """
     # Perfil inicial: Pzy[k] = (cota, distancia, etiqueta), k = 1..NG
-    NG = len(d["Pzy"])
+    NG = len(Pzy_points)
     Pzy = np.zeros((4, NG + 1), dtype=F64)
     nlabel = 0
-    for k, (a, b, c) in enumerate(d["Pzy"], start=1):
+    for k, (a, b, c) in enumerate(Pzy_points, start=1):
         Pzy[1, k], Pzy[2, k], Pzy[3, k] = a, b, c
         if c == 1.0:
             nlabel += 1
-
-    if Utsim == 2:
-        tsim = tsim * 12
-    if UTdib == 2:
-        Tdib = Tdib * 12
 
     # Factor de orientacion
     Factor = 0
@@ -333,6 +366,49 @@ def run(workdir=".", verbose=True):
     else:
         j = N + 1
     TL = j
+    return dict(Pzy=Pzy, NG=NG, nlabel=nlabel, Factor=Factor, N=N, P=P,
+                label=label, crestatalud=crestatalud, seepagelevel=seepagelevel,
+                roturanotch=roturanotch, zerolevel=zerolevel, TL=TL)
+
+
+class Cancelled(Exception):
+    """Calculo interrumpido desde la funcion de progreso."""
+
+
+def run(workdir=".", verbose=True, progress=None, seasons=None):
+    """Ejecuta el modelo con el data.dat de ``workdir``.
+
+    progress: funcion opcional progress(Tglob, tsim); si devuelve False se
+              interrumpe el calculo (excepcion Cancelled).
+    seasons:  tabla de oleaje por estacion (ver SEASONS); None = original.
+    """
+    np.seterr(all="ignore")   # la configuracion de NumPy es por hilo
+    tic = time.process_time()
+    d = read_data(os.path.join(workdir, "data.dat"))
+
+    rn = d["rn"]; Utsim = d["Utsim"]; tsim = d["tsim"]; UTdib = d["UTdib"]
+    Tdib = d["Tdib"]; Dz = d["Dz"]; lakelevel = d["lakelevel"]; Qb = d["Qb"]
+    Gs = d["Gs"]; groundwater = d["groundwater"]; Profagua = d["profagua"]
+    SFmin = d["SFmin"]; Kss = d["Kss"]; p = d["p"]; WFmin = d["WFmin"]
+    MMM = d["MMM"]; Rsc = d["Rsc"]; Cb = d["Cb"]; KRs = d["KRs"]; Bmat = d["Bmat"]
+    Shearstrength = d["Shearstrength"]; Ecohesion = d["Ecohesion"]
+    Ephi = d["Ephi"]; pesounit = d["pesounit"]; potestrato = d["potestrato"]
+    ndatosresis = d["ndatosresis"]; Mf = d["Mf"]
+
+    if verbose:
+        print("Great_lake_v.1 - Bluff clay lakes profiles recesion")
+
+    if Utsim == 2:
+        tsim = tsim * 12
+    if UTdib == 2:
+        Tdib = Tdib * 12
+
+    g = prepare_profile(d["Pzy"], Dz, lakelevel)
+    Pzy = g["Pzy"]; NG = g["NG"]; nlabel = g["nlabel"]; Factor = g["Factor"]
+    N = NPrefino = g["N"]; P = g["P"]; label = g["label"]
+    crestatalud = g["crestatalud"]; seepagelevel = g["seepagelevel"]
+    roturanotch = g["roturanotch"]; zerolevel = g["zerolevel"]; TL = g["TL"]
+    P_inicial = P.copy()
     controllevel = TL
 
     jdibujo = 1
@@ -408,9 +484,11 @@ def run(workdir=".", verbose=True):
     MatrizHwdraw = [None, h1, h2]
 
     # Condiciones de oleaje iniciales (invierno)
-    Waves, H, T, L, WF, Wn = set_waves("winter")
+    Waves, H, T, L, WF, Wn = set_waves("winter", seasons)
 
     fout2 = open(os.path.join(workdir, "timerecesion.out"), "w")
+    trec = []      # filas de timerecesion.out
+    roturas = []   # (mes, volumen, perfil antes, perfil despues)
 
     def record(jt):
         """Guarda el perfil en DibMatriz si jt es un instante de salida."""
@@ -450,6 +528,9 @@ def run(workdir=".", verbose=True):
     while Tglob <= tsim:
         if verbose:
             print(f"Time steep: {Tglob:8d}")
+        if progress is not None and progress(Tglob, tsim) is False:
+            fout2.close()
+            raise Cancelled()
         goto = 1001
 
         if invierno == 1:
@@ -464,7 +545,7 @@ def run(workdir=".", verbose=True):
                 Draw13 = 0; Draw14 = 0
             if counter == 4:
                 counter = 1
-            Waves, H, T, L, WF, Wn = set_waves("spring")
+            Waves, H, T, L, WF, Wn = set_waves("spring", seasons)
 
             last = tsim if Tglob >= tsim else Tglob
             if Draw13 == 1:
@@ -1056,6 +1137,10 @@ def run(workdir=".", verbose=True):
                             + "".join(ffmt(abs(c[label[il] + 2]), 9, 6) + "  "
                                       for il in range(1, nlabel + 1)))
                     fout2.write(line.rstrip() + "\n")
+                    roturas.append((Tglob, float(sumaincrementoy * Dz),
+                                    old[2:N + 2].astype(float), new[2:N + 2].astype(float)))
+                    trec.append((Tglob, float(sumaincrementoy * Dz), float(volacumulado1),
+                                 [float(abs(c[label[il] + 2])) for il in range(1, nlabel + 1)]))
 
                     # Matriz de niveles freaticos
                     if groundwater == 1:
@@ -1151,15 +1236,15 @@ def run(workdir=".", verbose=True):
                 if changelakelevel == 1:
                     change_level_exact(Tglob)
                 if Tglob == 3 * salto:
-                    Waves, H, T, L, WF, Wn = set_waves("summer")
+                    Waves, H, T, L, WF, Wn = set_waves("summer", seasons)
                     goto = 1001
                 elif Tglob == 3 * (salto + 1):
-                    Waves, H, T, L, WF, Wn = set_waves("fall")
+                    Waves, H, T, L, WF, Wn = set_waves("fall", seasons)
                     goto = 1001
                 elif Tglob == 3 * (salto + 2):
                     invierno = 1
                     counter = counter + 3
-                    Waves, H, T, L, WF, Wn = set_waves("winter")
+                    Waves, H, T, L, WF, Wn = set_waves("winter", seasons)
                     goto = 1002
             elif Pmonth != 0:
                 Draw = Tglob
@@ -1178,20 +1263,20 @@ def run(workdir=".", verbose=True):
                     for jt in range(Draw, Tglob + 1):
                         record(jt)
                 if 3 * salto <= Tglob < 3 * (salto + 1):
-                    Waves, H, T, L, WF, Wn = set_waves("summer")
+                    Waves, H, T, L, WF, Wn = set_waves("summer", seasons)
                     goto = 1001
                 elif 3 * (salto + 1) <= Tglob < 3 * (salto + 2):
-                    Waves, H, T, L, WF, Wn = set_waves("fall")
+                    Waves, H, T, L, WF, Wn = set_waves("fall", seasons)
                     goto = 1001
                 elif 3 * (salto + 2) <= Tglob < 3 * (salto + 3):
                     invierno = 1
                     counter = counter + 3
-                    Waves, H, T, L, WF, Wn = set_waves("winter")
+                    Waves, H, T, L, WF, Wn = set_waves("winter", seasons)
                     goto = 1002
                 elif Tglob == 3 * (salto + 3):
                     counter = 1
                     salto = salto + 4
-                    Waves, H, T, L, WF, Wn = set_waves("spring")
+                    Waves, H, T, L, WF, Wn = set_waves("spring", seasons)
                     goto = 1001
 
         # 1001 / 1002
@@ -1234,6 +1319,13 @@ def run(workdir=".", verbose=True):
         "Matrizrecesion": Matrizrecesion,
         "MatrizHwdraw": MatrizHwdraw,
         "profile": P,
+        "profile_inicial": P_inicial,
+        "timerecesion": trec,
+        "roturas": roturas,
+        "meta": dict(N=N, tsim=tsim, Tdib=Tdib, Dz=float(Dz), TL=TL,
+                     zerolevel=zerolevel, crestatalud=crestatalud,
+                     seepagelevel=seepagelevel, label=label[1:nlabel + 1],
+                     groundwater=groundwater, profagua=float(Profagua)),
     }
 
 
