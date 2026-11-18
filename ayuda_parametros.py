@@ -149,6 +149,61 @@ AYUDA = {
         "adentro, que es lo que describe la tesis.<br>"
         "<b>La de menor FS</b>: rompe el más inestable, que es el criterio clásico.",
     ),
+    # ---------------------------------------------------------------- oleaje
+    "oleaje": (
+        "Las olas que llegan en cada estación: su altura, su periodo y qué porcentaje "
+        "del tiempo se dan.",
+        "<b>H</b>: altura de ola en aguas profundas (m). <b>T</b>: periodo (s). "
+        "<b>Frecuencia</b>: % del tiempo en que se da esa ola. No suman 100 %: el resto es "
+        "calma.<br><br>"
+        "Para cada tipo de ola, el modelo calcula la longitud de onda L<sub>0</sub> = "
+        "1,56·T² y el número de olas al mes, N<sub>o</sub> = (3600/T)·(frecuencia/100)·24·30, "
+        "menos los días en que los derrubios protegen el pie. Propaga la ola desde una "
+        "profundidad de L<sub>0</sub>/2 hacia la costa (asomeramiento), la rompe cuando "
+        "H ≥ h/1,28 y calcula con ella la erosión del fondo, el impacto y el run-up.<br><br>"
+        "Estaciones: primavera (abr–jun), verano (jul–sep) y otoño (oct–dic). En invierno "
+        "(ene–mar) el hielo impide el oleaje y no se calcula. Valores por defecto: datos "
+        "NOAA del lago Erie (tabla 10.iii de la tesis).",
+    ),
+    # ----------------------------------------------------------- nivel / mareas
+    "nivel_estacional": (
+        "Sube el nivel del lago en primavera y verano, como ocurre en los Grandes Lagos.",
+        "Cada cambio de estación, el nivel pasa a ser «nivel del lago + subida de esa "
+        "estación». Valores de la tesis (tabla 10.iii, cotas IGLD 1985): invierno y otoño "
+        "173,99 m; primavera 174,39 m (+0,40); verano 174,29 m (+0,30). Las subidas se "
+        "redondean a múltiplos de Δz. El Fortran original tiene esta variación comentada "
+        "(desactivada).",
+    ),
+    "nivel_interanual": (
+        "Un ciclo lento de subidas y bajadas del nivel que dura 15 años.",
+        "A partir del mes 69, cada 9 meses el nivel cambia en un Δz: 5 subidas, 10 bajadas "
+        "y 5 subidas (±0,5 m con Δz = 0,1 m), y vuelve a empezar. Se suma a la variación "
+        "estacional. En el original está comentado y, además, perdía los cambios que caían "
+        "en invierno o durante la protección por derrubios, de modo que el nivel derivaba "
+        "hacia arriba. Aquí está corregido.",
+    ),
+    "serie_nivel": (
+        "Para ver una serie de niveles medidos (por ejemplo, marea.dat) junto al nivel "
+        "que usa el modelo. Solo se dibuja: no interviene en el cálculo.",
+        "Formato: una columna (nivel) o dos (tiempo y nivel), separadas por espacios, "
+        "comas o punto y coma. Las líneas que no son numéricas, como las cabeceras, se "
+        "ignoran.",
+    ),
+    # --------------------------------------------------------- linea temporal
+    "linea_temporal": (
+        "Arrastra la barra para ver el perfil mes a mes. Los colores indican qué pasa "
+        "cada mes.",
+        "<b>Gris oscuro</b>: mes calculado normalmente (oleaje y erosión).<br>"
+        "<b>Azul hielo</b>: invierno (enero–marzo). El lago está helado, no hay oleaje y el "
+        "modelo salta esos meses sin erosión.<br>"
+        "<b>Arena</b>: protección por derrubios. Tras una rotura, el material caído queda al "
+        "pie del acantilado y el oleaje tarda volumen/M<sub>f</sub> días en llevárselo; "
+        "mientras tanto el pie está protegido y el modelo salta esos meses sin erosión.<br>"
+        "<b>Rayas rojas</b>: meses con rotura (más altas si hay varias).<br>"
+        "<b>Línea cian bajo la barra</b>: tramo ya recorrido.<br><br>"
+        "Al pasar el ratón por la barra se ve qué ocurre en cada mes. Teclas: ← → (un "
+        "mes), RePág/AvPág (un año), Inicio/Fin.",
+    ),
     # -------------------------------------------------------- otras pestanas
     "perfil": (
         "Puntos que definen la forma inicial del acantilado, de tierra (arriba) a lago "

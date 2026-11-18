@@ -334,6 +334,13 @@ def etiqueta_info(texto, clave):
     return w
 
 
+COLOR_MES_CALCULADO = "#3a414d"
+COLOR_INVIERNO = "#9cc9f0"      # azul hielo
+COLOR_DERRUBIOS = "#d9a25b"     # arena
+COLOR_ROTURA = "#ff4d4d"
+COLOR_CURSOR = "#00e5ff"
+
+
 class LineaTemporal(QWidget):
     """Barra de tiempo mes a mes con marcas de roturas y meses sin calculo."""
 
@@ -345,10 +352,9 @@ class LineaTemporal(QWidget):
         self.valor = 0
         self.roturas = {}     # mes -> numero de roturas
         self.sin_calc = {}    # mes -> "invierno" | "derrubios"
-        self.setMinimumHeight(54)
+        self.setMinimumHeight(58)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
-        self.setToolTip("Arrastra o usa ← → (un mes), RePág/AvPág (un año), Inicio/Fin")
 
     def configurar(self, tsim, roturas, invierno, derrubios):
         self.tsim = int(tsim)
@@ -383,9 +389,30 @@ class LineaTemporal(QWidget):
         if self.tsim:
             self.set_valor(self._valor_en(ev.position().x()))
 
+    def describir_mes(self, mes):
+        if mes <= 0:
+            return "Mes 0: perfil inicial"
+        tipo = self.sin_calc.get(mes)
+        if tipo == "invierno":
+            estado = "invierno: lago helado, sin oleaje ni erosión"
+        elif tipo == "derrubios":
+            estado = "protegido por derrubios: sin erosión"
+        else:
+            estado = "calculado (oleaje y erosión)"
+        n = self.roturas.get(mes, 0)
+        txt = f"Mes {mes} (año {mes / 12:.2f}): {estado}"
+        if n:
+            txt += f" · {n} rotura{'s' if n > 1 else ''}"
+        return txt
+
     def mouseMoveEvent(self, ev):
-        if self.tsim and ev.buttons() & Qt.LeftButton:
+        if not self.tsim:
+            return
+        if ev.buttons() & Qt.LeftButton:
             self.set_valor(self._valor_en(ev.position().x()))
+        from PySide6.QtWidgets import QToolTip
+        mes = max(0, min(self.tsim, self._valor_en(ev.position().x())))
+        QToolTip.showText(ev.globalPosition().toPoint(), self.describir_mes(mes), self)
 
     def wheelEvent(self, ev):
         if self.tsim:
@@ -409,7 +436,7 @@ class LineaTemporal(QWidget):
         x0, x1 = self._x0x1()
         yb, hb = 18.0, 12.0
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor("#3a414d"))
+        p.setBrush(QColor(COLOR_MES_CALCULADO))
         p.drawRoundedRect(QRectF(x0, yb, x1 - x0, hb), 4, 4)
         if not self.tsim:
             p.setPen(QColor("#8a93a3"))
@@ -418,17 +445,15 @@ class LineaTemporal(QWidget):
         w = (x1 - x0) / self.tsim
         # meses sin calculo
         for m, tipo in self.sin_calc.items():
-            c = QColor("#56637a") if tipo == "invierno" else QColor("#8a6a3f")
+            c = QColor(COLOR_INVIERNO if tipo == "invierno" else COLOR_DERRUBIOS)
             p.fillRect(QRectF(self._x(m - 1), yb, max(1.0, w), hb), c)
-        # parte recorrida
-        p.setBrush(QColor(ACCENT))
-        p.setOpacity(0.55)
-        p.drawRoundedRect(QRectF(x0, yb, self._x(self.valor) - x0, hb), 4, 4)
-        p.setOpacity(1.0)
+        # parte recorrida: linea fina bajo la barra (no tapa los colores)
+        p.fillRect(QRectF(x0, yb + hb + 1.5, max(0.0, self._x(self.valor) - x0), 2.5),
+                   QColor(COLOR_CURSOR))
         # roturas
         for m, n in self.roturas.items():
             x = self._x(m - 0.5)
-            p.setPen(QPen(QColor("#ff4d4d"), 2 if n > 1 else 1.4))
+            p.setPen(QPen(QColor(COLOR_ROTURA), 2 if n > 1 else 1.4))
             p.drawLine(QPointF(x, yb - 7 - min(6, 2 * (n - 1))), QPointF(x, yb - 1))
         # escala en anos
         anos = self.tsim / 12.0
@@ -444,12 +469,12 @@ class LineaTemporal(QWidget):
         while a * 12 <= self.tsim:
             x = self._x(a * 12)
             p.setPen(QPen(QColor("#8a93a3"), 1))
-            p.drawLine(QPointF(x, yb + hb), QPointF(x, yb + hb + 4))
-            p.drawText(QRectF(x - 20, yb + hb + 4, 40, 14), Qt.AlignHCenter, f"{a}")
+            p.drawLine(QPointF(x, yb + hb + 4), QPointF(x, yb + hb + 7))
+            p.drawText(QRectF(x - 20, yb + hb + 7, 40, 14), Qt.AlignHCenter, f"{a}")
             a += paso
         ultimo = self._x((a - paso) * 12)
         if x1 - ultimo > 60:
-            p.drawText(QRectF(x1 - 60, yb + hb + 4, 60, 14), Qt.AlignRight, "años")
+            p.drawText(QRectF(x1 - 60, yb + hb + 7, 60, 14), Qt.AlignRight, "años")
         # cursor
         x = self._x(self.valor)
         p.setPen(QPen(QColor("#00e5ff"), 2))
@@ -820,11 +845,15 @@ class Ventana(QMainWindow):
         self.cb_vel.currentIndexChanged.connect(self._velocidad)
         fila.addWidget(self.cb_vel)
         fila.addStretch(1)
-        leyenda = QLabel('<span style="color:#ff4d4d">┃</span> rotura &nbsp; '
-                         '<span style="color:#56637a">█</span> invierno (sin cálculo) &nbsp; '
-                         '<span style="color:#8a6a3f">█</span> protección por derrubios')
-        leyenda.setStyleSheet("color: #aab2bf; font-size: 8pt;")
+        leyenda = QLabel(
+            f'<span style="color:{COLOR_ROTURA}">┃</span> rotura &nbsp;&nbsp; '
+            f'<span style="color:{COLOR_MES_CALCULADO}; background:{COLOR_MES_CALCULADO}">'
+            f'&nbsp;&nbsp;&nbsp;</span> mes con erosión &nbsp;&nbsp; '
+            f'<span style="color:{COLOR_INVIERNO}">█</span> invierno: lago helado &nbsp;&nbsp; '
+            f'<span style="color:{COLOR_DERRUBIOS}">█</span> pie protegido por derrubios')
+        leyenda.setStyleSheet("color: #c3cad5; font-size: 8pt;")
         fila.addWidget(leyenda)
+        fila.addWidget(InfoBoton("linea_temporal"))
         bl.addLayout(fila)
         self.linea = LineaTemporal()
         self.linea.valor_cambiado.connect(self._cambio_mes)
@@ -894,7 +923,7 @@ class Ventana(QMainWindow):
         w = QWidget()
         v = QVBoxLayout(w)
         fila = QHBoxLayout()
-        fila.addWidget(QLabel("Estación:"))
+        fila.addWidget(etiqueta_info("Estación:", "oleaje"))
         self.cb_estacion = QComboBox()
         for _, nombre in ESTACIONES:
             self.cb_estacion.addItem(nombre)
@@ -929,6 +958,7 @@ class Ventana(QMainWindow):
         w = QWidget()
         v = QVBoxLayout(w)
         fila = QHBoxLayout()
+        fila.addWidget(InfoBoton("serie_nivel"))
         b = QPushButton("Cargar serie (marea.dat)…")
         b.clicked.connect(self.cargar_serie_nivel)
         fila.addWidget(b)
@@ -941,7 +971,11 @@ class Ventana(QMainWindow):
         g = QGroupBox("Variación del nivel del lago en el cálculo")
         gf = QVBoxLayout(g)
         self.ck_estacional = QCheckBox("Variación estacional (subida respecto al nivel del lago):")
-        gf.addWidget(self.ck_estacional)
+        fe0 = QHBoxLayout()
+        fe0.addWidget(self.ck_estacional)
+        fe0.addWidget(InfoBoton("nivel_estacional"))
+        fe0.addStretch(1)
+        gf.addLayout(fe0)
         fe = QHBoxLayout()
         self.sp_estac = {}
         for clave, nombre in ESTACIONES:
@@ -955,7 +989,11 @@ class Ventana(QMainWindow):
         gf.addLayout(fe)
         self.ck_interanual = QCheckBox("Ciclo interanual de 15 años (±5·Δz, cambios cada 9 meses "
                                        "desde el mes 69)")
-        gf.addWidget(self.ck_interanual)
+        fi0 = QHBoxLayout()
+        fi0.addWidget(self.ck_interanual)
+        fi0.addWidget(InfoBoton("nivel_interanual"))
+        fi0.addStretch(1)
+        gf.addLayout(fi0)
         fb = QHBoxLayout()
         b = QPushButton("Valores de la tesis")
         b.clicked.connect(self._nivel_tesis)
@@ -1710,6 +1748,11 @@ class Ventana(QMainWindow):
             hay = True
         ax.set_xlabel("Tiempo (años)" if self.serie_nivel is None else "Tiempo")
         ax.set_ylabel("Nivel (m)")
+        ax.ticklabel_format(axis="y", useOffset=False)
+        lo, hi = ax.get_ylim()
+        if hi - lo < 0.2:          # nivel (casi) constante: margen visible
+            c = 0.5 * (lo + hi)
+            ax.set_ylim(c - 0.5, c + 0.5)
         ax.legend(fontsize=8)
         lz.fig.tight_layout()
         lz.draw_idle()
