@@ -1,0 +1,39 @@
+Data entry for Great_lake_v.
+Enter run number
+151
+Units of simulation time (1:months; 2:years)_integer
+1
+Simulation time
+1260
+Units per result output (1:months; 2:years)_integer
+1
+Result output time
+60
+Vertical discretization size (m)
+0.1
+Tidal level (m above/below[in negative] zero)
+0.0
+Sand amount (m3/m)
+0.0
+Sand grain diameter (m)
+0.001
+Groundwater (0:no; 1:yes; 2: fully saturated); Groundwater depth landward (m)
+2,0.5
+Number of geological layers (from top to bottom)
+1
+Clay erosion treshold value [0.5-20 Pa]; Coef. for shear stress [Kss]; Calibration coef. [p]
+5. 0.0000024 1.
+Threshold surf force [50-500 Kg/m^2]; Coef. for bluff erosion [MMM]
+70. 0.00000001
+Treshold run-up distance [0.5-20 Pa]; Coef. for run-up [Cb]; Coef. for Rs to shear [KRs]; Beach material factor [Bmat]
+5. 0.0000001 1. 1.
+UCS [100-550 KPa]; Shear strength (KPa); Effective cohesion(20-KPa); Effective friction angle (19-º); Unit weight(KN/m**3); Strata depth (m)
+200. 8. 23. 25. 23.4 120.
+Debris Mobility Coeff. (m**2/day)
+2.9
+Bluff initial profile (m) [1:Study point; 2:Talus wedge; 3:Seepage point; 4:Talus base point => roturanotch] 1718.18 / 340.3
+25.0000001 -1000. 0.
+25.0000001 -9.2 3.
+25.0000001 -9.1 2.
+0. 0. 4.
+-60. 1718.18 0.
