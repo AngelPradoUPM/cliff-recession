@@ -1,4 +1,4 @@
-# cliff-fall
+# cliff-recession
 
 Modelo de erosión y retroceso de acantilados de arcillas (tills) en lagos sin
 marea (lago Erie), de R. Castedo (UPM). La tesis doctoral relacionada está en
