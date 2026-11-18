@@ -656,6 +656,10 @@ class Ventana(QMainWindow):
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
         self.lienzo = Lienzo(oscuro=True)
+        self._bg = None
+        self._linea_mes = None
+        self._modo_activo = False
+        self.lienzo.mpl_connect("draw_event", self._on_draw)
         nav = NavigationToolbar2QT(self.lienzo, w)
         nav.setStyleSheet("background: #e9e9e9; border: none;")
         v.addWidget(nav)
@@ -996,8 +1000,11 @@ class Ventana(QMainWindow):
         # Agua y terreno
         ax.fill_betweenx(z, y0, ymax + 1e6, where=z <= zlago + 1e-9, color="#2e6f9e",
                          alpha=0.35, lw=0, label="_agua")
+        modo_mes = (self.res is not None and self.res["meta"]["N"] == N
+                    and self.linea.valor > 0)
+        self._modo_activo = modo_mes
         terreno = y0
-        if self.res is not None and self.res["meta"]["N"] == N:
+        if self.res is not None and self.res["meta"]["N"] == N and not modo_mes:
             vis = [r for r in range(self.tb_salidas.rowCount())
                    if self.tb_salidas.item(r, 0) is not None
                    and self.tb_salidas.item(r, 0).checkState() == Qt.Checked]
@@ -1010,6 +1017,9 @@ class Ventana(QMainWindow):
         self._art_mes = []
         self._z_actual = z
         self._ymin_actual = ymin
+        self._y0_actual = y0
+        self._zlago_actual = zlago
+        self._fill_erosion = []
         ax.axhline(zlago, color="#4fa3e0", lw=1.2, ls="-", label=f"Nivel del lago ({zlago:.2f} m)")
         ax.plot(y0, z, color="#f0f0f0", lw=1.8, label="Perfil inicial (año 0, datos)")
         ax.plot([p[1] for p in d["Pzy"]], [p[0] for p in d["Pzy"]], "o", ms=3.5,
@@ -1043,7 +1053,7 @@ class Ventana(QMainWindow):
             if pp is not None and self.ck_primer.isChecked():
                 mes_pp, perfil_pp = pp
                 ln, = ax.plot(perfil_pp, z, color="#9fb3c8", lw=1.3, ls=(0, (4, 2)),
-                              alpha=0.4 if sel else 1.0,
+                              alpha=0.22 if modo_mes else (0.4 if sel else 1.0),
                               label=f"Tras el 1.er mes calculado (mes {mes_pp})")
                 self._lineas_tenues.append(ln)
             for r in cols:
@@ -1052,7 +1062,7 @@ class Ventana(QMainWindow):
                 if ano <= 0:
                     continue
                 ln, = ax.plot(Dib[2:N + 2, k], z, color=cmap(norm(ano)), lw=1.2,
-                              alpha=0.3 if sel else 1.0)
+                              alpha=0.22 if modo_mes else (0.3 if sel else 1.0))
                 self._lineas_tenues.append(ln)
             if cols:
                 sm = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
@@ -1104,11 +1114,13 @@ class Ventana(QMainWindow):
             leg.set_draggable(True)
         lz.fig.tight_layout()
         if hay_res:
-            self._linea_mes, = ax.plot(y0, z, color="#00e5ff", lw=2.6, zorder=6, visible=False)
+            self._linea_mes, = ax.plot(y0, z, color="#00e5ff", lw=2.6, zorder=6, visible=False,
+                                       animated=True)
             self._txt_mes = ax.text(0.015, 0.975, "", transform=ax.transAxes, va="top",
                                     ha="left", fontsize=10, fontweight="bold", color="#00e5ff",
-                                    zorder=7, bbox=dict(boxstyle="round,pad=0.35",
-                                                        fc="#1d2128", ec="#00e5ff", lw=0.8))
+                                    zorder=7, animated=True,
+                                    bbox=dict(boxstyle="round,pad=0.35",
+                                              fc="#1d2128", ec="#00e5ff", lw=0.8))
             self._txt_mes.set_visible(False)
             self._actualizar_mes(redibujar=False)
         else:
@@ -1162,6 +1174,11 @@ class Ventana(QMainWindow):
                 c.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 tr.setItem(i, k, c)
         self.tabs_der.setTabText(1, f"Roturas ({len(r['roturas'])})")
+        self._set_invierno = set(r["mensual"]["invierno"])
+        self._set_derrubios = set(r["mensual"]["derrubios"])
+        self._roturas_mes = {}
+        for rot in r["roturas"]:
+            self._roturas_mes.setdefault(rot[0], []).append(rot)
         self.linea.configurar(r["meta"]["tsim"], [m for m, *_ in r["roturas"]],
                               r["mensual"]["invierno"], r["mensual"]["derrubios"])
         self._activar_linea(True)
@@ -1180,7 +1197,7 @@ class Ventana(QMainWindow):
             self.lb_mes.setText("")
 
     def _velocidad(self, *_):
-        self.timer.setInterval([350, 140, 60, 25][self.cb_vel.currentIndex()])
+        self.timer.setInterval([300, 120, 50, 16][self.cb_vel.currentIndex()])
 
     def reproducir(self):
         if self.timer.isActive():
@@ -1211,17 +1228,35 @@ class Ventana(QMainWindow):
             return r["profile_inicial"][2, 1:r["meta"]["N"] + 1]
         return men["perfiles"][i]
 
+    def _animados(self):
+        return self._fill_erosion + self._art_mes + [self._linea_mes, self._txt_mes]
+
+    def _on_draw(self, _evento):
+        """Tras un dibujo completo guarda el fondo y pinta los elementos del mes."""
+        if self._linea_mes is None:
+            self._bg = None
+            return
+        lz = self.lienzo
+        self._bg = lz.copy_from_bbox(lz.fig.bbox)
+        for a in self._animados():
+            if a.get_visible():
+                lz.ax.draw_artist(a)
+
     def _actualizar_mes(self, redibujar=True):
-        if self.res is None or getattr(self, "_linea_mes", None) is None:
+        """Actualiza el perfil del mes seleccionado (dibujo rapido por blitting)."""
+        if self.res is None or self._linea_mes is None:
             return
         mes = self.linea.valor
+        activo = mes > 0
+        if redibujar and activo != self._modo_activo:
+            # cambia el fondo (perfiles atenuados / terreno): dibujo completo
+            self.dibujar_perfil()
+            return
         ax = self.lienzo.ax
-        for a in self._art_mes:
+        for a in self._art_mes + self._fill_erosion:
             a.remove()
         self._art_mes = []
-        activo = mes > 0
-        for ln in self._lineas_tenues:
-            ln.set_alpha(0.22 if activo else 1.0)
+        self._fill_erosion = []
         self._linea_mes.set_visible(activo)
         self._txt_mes.set_visible(activo)
         z = self._z_actual
@@ -1229,42 +1264,53 @@ class Ventana(QMainWindow):
         if activo:
             perfil = self._perfil_mes(mes)
             self._linea_mes.set_xdata(perfil)
-            self._fill_terreno.remove()
-            self._fill_terreno = ax.fill_betweenx(z, self._ymin_actual - 1e6, perfil,
-                                                  color="#6b5a45", alpha=0.55, lw=0, zorder=0)
-            rot = [(m, v, a, b) for (m, v, a, b) in self.res["roturas"] if m == mes]
-            for _, _, antes, _ in rot:
-                ln, = ax.plot(antes, z, color="#ff6b6b", lw=1.0, ls="--", zorder=5)
+            # zona erosionada hasta este mes: se "vacia" (aire o agua)
+            y0 = self._y0_actual
+            erosion = perfil < y0 - 1e-9
+            for donde, color in ((erosion & (z > self._zlago_actual), CANVAS_BG),
+                                 (erosion & (z <= self._zlago_actual), "#29435a")):
+                if donde.any():
+                    self._fill_erosion.append(ax.fill_betweenx(
+                        z, perfil, y0, where=donde, color=color, alpha=0.9, lw=0,
+                        zorder=1, animated=True))
+            rot = self._roturas_mes.get(mes, [])
+            for antes in rot:
+                ln, = ax.plot(antes[2], z, color="#ff6b6b", lw=1.0, ls="--", zorder=5,
+                              animated=True)
                 self._art_mes.append(ln)
             P0 = self.res["profile_inicial"]
             TL, kc = meta["TL"], meta["crestatalud"]
             r_lago = P0[2, TL] - perfil[TL - 1]
             r_cresta = P0[2, kc] - perfil[kc - 1]
-            men = self.res["mensual"]
-            if mes in set(men["invierno"]):
+            if mes in self._set_invierno:
                 estado = "invierno: no se calcula"
-            elif mes in set(men["derrubios"]):
+            elif mes in self._set_derrubios:
                 estado = "protegido por derrubios: sin erosión"
             else:
                 estado = "calculado"
             txt = f"Mes {mes}  ·  año {mes / 12:.2f}"
             if rot:
                 txt += f"\n{len(rot)} rotura{'s' if len(rot) > 1 else ''} " \
-                       f"({sum(v for _, v, _, _ in rot):.1f} m³/m)"
+                       f"({sum(r[1] for r in rot):.1f} m³/m)"
             self._txt_mes.set_text(txt)
             self.lb_mes.setText(
                 f"Mes {mes} de {meta['tsim']} (año {mes / 12:.2f}) · {estado} · "
                 f"retroceso: nivel del lago {_f2(r_lago)} m, cresta {_f2(r_cresta)} m"
                 + (f" · {len(rot)} rotura(s)" if rot else ""))
         else:
-            self._fill_terreno.remove()
-            terreno = self._terreno_base
-            self._fill_terreno = ax.fill_betweenx(z, self._ymin_actual - 1e6, terreno,
-                                                  color="#6b5a45", alpha=0.55, lw=0, zorder=0)
             self.lb_mes.setText(f"Mes 0 (perfil inicial) · arrastra la barra para ver la "
                                 f"evolución mes a mes hasta el mes {meta['tsim']}")
-        if redibujar:
-            self.lienzo.draw_idle()
+        if not redibujar:
+            return
+        lz = self.lienzo
+        if self._bg is None:
+            lz.draw_idle()
+            return
+        lz.restore_region(self._bg)
+        for a in self._animados():
+            if a.get_visible():
+                ax.draw_artist(a)
+        lz.blit(lz.fig.bbox)
 
     def _marcar_salidas(self, estado):
         t = self.tb_salidas
