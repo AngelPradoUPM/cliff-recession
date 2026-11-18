@@ -14,9 +14,12 @@ resultados que el ejecutable Fortran:
 * Se respeta la semantica de los bucles DO de Fortran (valor de la variable
   de control al salir del bucle) y de los GO TO.
 * Se respeta la aritmetica de Fortran: division entera truncada hacia cero
-  (p.ej. ``(1/2) = 0``, ``LimWB/10``), constantes reales de precision simple
-  (``9.81``, ``1.56``, ``3.1416``...) que se promocionan a doble precision, y
-  productos que Fortran evalua en precision simple (p.ej. ``9.81*(j-TL)``).
+  (p.ej. ``tsim/Tdib``) y las constantes escritas sin ``d0`` en el original,
+  que son de precision simple (``pi``, ``1.56``, frecuencias de oleaje,
+  ``freshwater = 9.81``, ``9.81**0.5``, ``0.12``, ``0.0034``, ``512.61``,
+  ``0.78``...) y se promocionan a doble precision.
+* Las funciones elementales (exp, sqrt, tan...) son las de la libm de C, como
+  en gfortran.
 * Las operaciones en coma flotante siguen IEEE (divisiones por cero dan
   Inf/NaN en lugar de lanzar excepciones), igual que el ejecutable Fortran.
 
@@ -49,11 +52,6 @@ pi = F64(np.float32(3.141592653589793))
 def f32(x):
     """Constante real por defecto de Fortran (REAL*4) promocionada a REAL*8."""
     return F64(np.float32(x))
-
-
-def f32mul(a, b):
-    """Producto evaluado en precision simple (REAL*4 * REAL*4 o INTEGER)."""
-    return F64(np.float32(np.float32(a) * np.float32(b)))
 
 
 def idiv(a, b):
@@ -111,14 +109,15 @@ cos = _wrap(math.cos)
 sin = _wrap(math.sin)
 
 # Constantes de precision simple usadas en el codigo original
-G981 = f32(9.81)
+G = F64(9.81)                    # 9.81d0
+G981_S = f32(9.81)               # freshwater = 9.81 (REAL*4)
 SQRT_G981 = F64(np.sqrt(np.float32(9.81)))  # 9.81**0.5 se evalua en REAL*4
-C128 = f32(1.28)
-C005 = f32(0.05)
-C3_1416 = f32(3.1416)
-TWO_314 = f32mul(2, 3.14)        # 2*3.14 (REAL*4)
-TWO_31416 = f32mul(2, 3.1416)    # 2*3.1416 (REAL*4)
-FOUR_31416 = f32mul(4, 3.1416)   # 2*2*3.1416 (REAL*4)
+C128 = F64(1.28)                 # 1.28d0
+C005 = F64(0.05)                 # 0.05d0
+C3_1416 = F64(3.1416)            # 3.1416d0
+TWO_314 = F64(2.0) * f32(3.14)   # 2.d0*3.14 (3.14 es REAL*4)
+TWO_31416 = 2 * C3_1416          # 2*3.1416d0
+FOUR_31416 = 4 * C3_1416         # 2.d0*2.d0*3.1416d0
 
 
 def ffmt(v, w, d):
@@ -360,7 +359,7 @@ def run(workdir=".", verbose=True):
     c1[3:N + 3] = P[1, 1:N + 1]; c2[3:N + 3] = P[2, 1:N + 1]
     Matrizrecesion = [None, c1, c2]
 
-    freshwater = G981   # peso especifico del agua dulce (kN/m3)
+    freshwater = G981_S   # peso especifico del agua dulce (kN/m3)
     seawater = F64(1030)  # densidad (kg/m3)
 
     # Inicializacion de variables
@@ -508,20 +507,20 @@ def run(workdir=".", verbose=True):
                         DD = (exp(2 * pi * hL) - exp(-2 * pi * hL)) / (exp(2 * pi * hL) + exp(-2 * pi * hL))
                         LL = L[i] * sqrt(DD)
                     elif hL <= C005:
-                        LL = T[i] * sqrt(f32mul(9.81, j - TL) * Dz)
+                        LL = T[i] * sqrt(G * (j - TL) * Dz)
                     if not goto62:
                         OO = 2 * 2 * pi * (j - TL) * Dz / LL
                         NN = (exp(OO) - exp(-OO)) / 2
                         n = F64(0.5) * (1 + (OO / NN))
                         if hL <= 0.25 and hL > C005:
-                            xx = f32mul(TWO_314, j - TL) * Dz / LL
+                            xx = TWO_314 * (j - TL) * Dz / LL
                             DD1 = (exp(xx) - exp(-xx)) / (exp(xx) + exp(-xx))
-                            WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * (G981 * T[i] * DD1 / TWO_314)))
+                            WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * (G * T[i] * DD1 / TWO_314)))
                         elif hL <= C005:
-                            WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * sqrt(f32mul(9.81, j - TL) * Dz)))
+                            WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * sqrt(G * (j - TL) * Dz)))
                     # 62
                     if WH[j] >= (j - TL) * Dz / C128:
-                        WBD = F64(idiv(int(WH[j] * C128 * 10), 10))
+                        WBD = int(WH[j] * C128 * F64(10.0)) / F64(10.0)
                         HB = WH[j]
                         break
                 # 63: longitud de la zona de rompientes
@@ -538,8 +537,8 @@ def run(workdir=".", verbose=True):
                     if P[2, j] == P[2, BD]:
                         WH[j] = HB
                     else:
-                        WH[j] = HB * exp((f32(-35.2) * (abs(P[2, BD] - P[2, j])) * GR)
-                                         / (T[i] * sqrt(G981 * WBD)))
+                        WH[j] = HB * exp((F64(-35.2) * (abs(P[2, BD] - P[2, j])) * GR)
+                                         / (T[i] * sqrt(G * WBD)))
 
                 # Pendiente de la playa - Sunamura (1989)
                 VVV = HB / (SQRT_G981 * (Gs ** F64(0.5)) * T[i])
@@ -670,34 +669,31 @@ def run(workdir=".", verbose=True):
                         continue
                     elif hL <= 0.25 and hL > C005:
                         if j > BD:
-                            XX = f32mul(TWO_31416, j - TL) * Dz / L[i]
+                            XX = TWO_31416 * (j - TL) * Dz / L[i]
                             YY = (exp(XX) - exp(-XX)) / (exp(XX) + exp(-XX))
                             Lb = L[i] * sqrt(YY)
-                            HH = f32mul(FOUR_31416, j - TL) * Dz / Lb
+                            HH = FOUR_31416 * (j - TL) * Dz / Lb
                             II = (exp(HH) - exp(-HH)) / 2
                             Sd = C3_1416 * (WH[j] ** 2) / (4 * Lb * II)
                             GG = TWO_31416 * ((j - TL) * Dz - Sd) / Lb
                             EE = (exp(GG) - exp(-GG)) / 2
                             Uo = C3_1416 * WH[j] / (T[i] * EE)
                     elif hL <= C005:
-                        Lb = T[i] * sqrt(f32mul(9.81, j - TL) * Dz)
-                        HH = f32mul(FOUR_31416, j - TL) * Dz / Lb
+                        Lb = T[i] * sqrt(G * (j - TL) * Dz)
+                        HH = FOUR_31416 * (j - TL) * Dz / Lb
                         II = (exp(HH) - exp(-HH)) / 2
                         Sd = C3_1416 * (WH[j] ** 2) / (4 * Lb * II)
-                        Uo = (WH[j] / 2) * sqrt(G981 / ((j - TL) * Dz - Sd))
+                        Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz - Sd))
 
                     if j < BD and P[2, j] < P[2, BD]:
-                        Su = f32(0.185767) * (WBD / SZ) * (P[2, BD] - P[2, j])
-                        Uo = (WH[j] / 2) * sqrt(G981 / ((j - TL) * Dz + Su))
+                        Su = F64(0.185767) * (WBD / SZ) * (P[2, BD] - P[2, j])
+                        Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz + Su))
                     elif j < BD and P[2, j] == P[2, BD]:
                         Su = F64(0)
-                        Uo = (WH[j] / 2) * sqrt(G981 / ((j - TL) * Dz))
+                        Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz))
 
-                    # NOTA: en el original SS = (1/2)*Fw*... y (1/2) es una
-                    # division ENTERA que vale 0. Se mantiene para reproducir
-                    # exactamente los resultados del Fortran.
                     def shear():
-                        SS = F64(idiv(1, 2)) * Fw * seawater * (Uo ** 2)
+                        SS = (1 / F64(2.0)) * Fw * seawater * (Uo ** 2)
                         return No * Kss * ((SS - SFmin) ** p)
 
                     if Playa == 1:

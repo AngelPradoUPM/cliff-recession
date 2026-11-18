@@ -1,29 +1,29 @@
-%  Great_lake_v.1.f90 
-%
-%  FUNCTIONS:
-%  Great_lake_v.1 - Bluff clay lakes profiles recesion (LAKE ERIE)
-%
-%****************************************************************************
-%
-%  PROGRAM: Great_lake_v.2
-%
-%  PURPOSE:  Bluff tills erosion over non-tidal environments.
-%
-%  Programers: R. Castefor                              
-%  Email: ricardo.castedo@upm.es           
-%                                                                      
-%  First version date: 28 / September / 2011		                   
-%  Last version date: 04 / November / 2011
-%
-%****************************************************************************
-%
-%  VARIABLES-PROGRAM DESCRIPTION: 
-%   
-%                               Failure from 0 or lakelevel in case of a new
-%                               profile "creates" material
-%  
-%
-%****************************************************************************
+!  Great_lake_v.1.f90 
+!
+!  FUNCTIONS:
+!  Great_lake_v.1 - Bluff clay lakes profiles recesion (LAKE ERIE)
+!
+!****************************************************************************
+!
+!  PROGRAM: Great_lake_v.2
+!
+!  PURPOSE:  Bluff tills erosion over non-tidal environments.
+!
+!  Programers: R. Castedo                              
+!  Email: ricardo.castedo@upm.es           
+!                                                                      
+!  First version date: 28 / September / 2011		                   
+!  Last version date: 04 / November / 2011
+!
+!****************************************************************************
+!
+!  VARIABLES-PROGRAM DESCRIPTION: 
+!   
+!                               Failure from 0 or lakelevel in case of a new
+!                               profile "creates" material
+!  
+!
+!****************************************************************************
 
 implicit none
 parameter z=500,zz=4,zzz=1000
@@ -78,133 +78,133 @@ real*8 XDistPcirc2,Xca,Xcb,Xmedio,XPtomedio,XX
 real*8 Yc,Yca,Ycb,Ymedio,YDistPcirc2,yerosionmax[allocatable](:),Yopc1,Yopc2,YPtomedio,YY
 real*8 Zc
 
-%Creacion de los ficheros de lectura y salida de datos
+!Creacion de los ficheros de lectura y salida de datos
 open(1,file='data.dat',status='unknown')
 open(2,file='timerecesion.out',status='unknown')
-%open(3,file='marea.dat',status='unknown')
+!open(3,file='marea.dat',status='unknown')
 open(4,file='Matriz_dibujo.out',status='unknown')
 open(6,file='Matriz_roturas.out',status='unknown')
 open(7,file='Matriz_recesion.out',status='unknown')
 open(8,file='Matriz_seepage.out',status='unknown')
 
-%Input data
+!Input data
 read(1,*) basura
-read(1,*) basura %Enter run number
+read(1,*) basura !Enter run number
 read(1,*) rn
-read(1,*) basura %Units of simulation time (0:hours; 1:days; 2:months; 3:years)
+read(1,*) basura !Units of simulation time (0:hours; 1:days; 2:months; 3:years)
 read(1,*) Utsim
-read(1,*) basura %Simulation time
+read(1,*) basura !Simulation time
 read(1,*) tsim
-read(1,*) basura %Units per result output (0:hours; 1:days; 2:months; 3:years)
+read(1,*) basura !Units per result output (0:hours; 1:days; 2:months; 3:years)
 read(1,*) UTdib
-read(1,*) basura %Result output time
+read(1,*) basura !Result output time
 read(1,*) Tdib
-read(1,*) basura %Vertical discretization size (m)
+read(1,*) basura !Vertical discretization size (m)
 read(1,*) Dz
-read(1,*) basura %Tidal level (m above/below[in negative] zero) 
+read(1,*) basura !Tidal level (m above/below[in negative] zero) 
 read(1,*) lakelevel
-read(1,*) basura %Sand amount (m3/m)
+read(1,*) basura !Sand amount (m3/m)
 read(1,*) Qb
-read(1,*) basura %Sand grain diameter (m)
+read(1,*) basura !Sand grain diameter (m)
 read(1,*) Gs
-read(1,*) basura %Groundwater (0:no; 1:yes; 2: fully saturated); Groundwater depth landward (m)
+read(1,*) basura !Groundwater (0:no; 1:yes; 2: fully saturated); Groundwater depth landward (m)
 read(1,*) groundwater,profagua
-read(1,*) basura %Number of geological layers (from top to bottom)
+read(1,*) basura !Number of geological layers (from top to bottom)
 read(1,*) ndatosresis
 
-%%Dimension of the used variables function of ndatosresis
-%allocate (SFmin(ndatosresis),stat=ISFmin)
-%if (ISFmin.NE.0) 
-%	stop 'Dimension failure: SFmin'
-%end if
-%allocate (Kss(ndatosresis),stat=IKss)
-%if (IKss.NE.0) 
-%	stop 'Dimension failure: Kss'
-%end if
-%allocate (p(ndatosresis),stat=Ip)
-%if (Ip.NE.0) 
-%	stop 'Dimension failure: p'
-%end if
+!!Dimension of the used variables function of ndatosresis
+!allocate (SFmin(ndatosresis),stat=ISFmin)
+!if (ISFmin.NE.0) then
+!	stop 'Dimension failure: SFmin'
+!end if
+!allocate (Kss(ndatosresis),stat=IKss)
+!if (IKss.NE.0) then
+!	stop 'Dimension failure: Kss'
+!end if
+!allocate (p(ndatosresis),stat=Ip)
+!if (Ip.NE.0) then
+!	stop 'Dimension failure: p'
+!end if
 read(1,*) basura 
-%for i = 1, ndatosresis
-	read(1,*) SFmin,Kss,p %Clay erosion treshold value [0.5-20 Pa]; Coef. for shear stress [Kss]; Calibration coef. [p]
-%end do
+!do i = 1, ndatosresis
+	read(1,*) SFmin,Kss,p !Clay erosion treshold value [0.5-20 Pa]; Coef. for shear stress [Kss]; Calibration coef. [p]
+!end do
 
-%%Dimension of the used variables function of ndatosresis
-%allocate (MMM(ndatosresis),stat=IMMM)
-%if (IMMM.NE.0) 
-%	stop 'Dimension failure: MMM'
-%end if
-%allocate (WFmin(ndatosresis),stat=IWFmin)
-%if (IWFmin.NE.0) 
-%	stop 'Dimension failure: WFmin'
-%end if
+!!Dimension of the used variables function of ndatosresis
+!allocate (MMM(ndatosresis),stat=IMMM)
+!if (IMMM.NE.0) then
+!	stop 'Dimension failure: MMM'
+!end if
+!allocate (WFmin(ndatosresis),stat=IWFmin)
+!if (IWFmin.NE.0) then
+!	stop 'Dimension failure: WFmin'
+!end if
 read(1,*) basura 
-%for i = 1, ndatosresis 
-	read(1,*) WFmin,MMM %Threshold surf force [50-500 Kg/m^2]; Coef. for bluff erosion [MMM]
-%end do
+!do i = 1, ndatosresis 
+	read(1,*) WFmin,MMM !Threshold surf force [50-500 Kg/m^2]; Coef. for bluff erosion [MMM]
+!end do
 
-%Dimension of the used variables function of ndatosresis
-%allocate (Rsc(ndatosresis),stat=IRsc)
-%if (IRsc.NE.0) 
-%	stop 'Dimension failure: Rsc'
-%end if
-%allocate (Cb(ndatosresis),stat=ICb)
-%if (ICb.NE.0) 
-%	stop 'Dimension failure: Cb'
-%end if
-%allocate (Bmat(ndatosresis),stat=IBmat)
-%if (IBmat.NE.0) 
-%	stop 'Dimension failure: Bmat'
-%end if
+!Dimension of the used variables function of ndatosresis
+!allocate (Rsc(ndatosresis),stat=IRsc)
+!if (IRsc.NE.0) then
+!	stop 'Dimension failure: Rsc'
+!end if
+!allocate (Cb(ndatosresis),stat=ICb)
+!if (ICb.NE.0) then
+!	stop 'Dimension failure: Cb'
+!end if
+!allocate (Bmat(ndatosresis),stat=IBmat)
+!if (IBmat.NE.0) then
+!	stop 'Dimension failure: Bmat'
+!end if
 read(1,*) basura 
-%for i = 1, ndatosresis 
-	read(1,*) Rsc,Cb,KRs,Bmat %Treshold run-up distance []; Coef. for run-up [Cb]; Coef. for Rs to shear [KRs]; Beach material factor [Bmat]
-%end do
+!do i = 1, ndatosresis 
+	read(1,*) Rsc,Cb,KRs,Bmat !Treshold run-up distance []; Coef. for run-up [Cb]; Coef. for Rs to shear [KRs]; Beach material factor [Bmat]
+!end do
 
-%Dimension of the used variables function of ndatosresis
+!Dimension of the used variables function of ndatosresis
 allocate (sigmac(ndatosresis),stat=Isigmac)
-if (Isigmac.NE.0) 
+if (Isigmac.NE.0) then
 	stop 'Dimension failure: sigmac'
 end if
 allocate (Shearstrength(ndatosresis),stat=IShearstrength)
-if (IShearstrength.NE.0) 
+if (IShearstrength.NE.0) then
 	stop 'Dimension failure: Shearstrength'
 end if
 allocate (Ecohesion(ndatosresis),stat=IEcohesion)
-if (IEcohesion.NE.0) 
+if (IEcohesion.NE.0) then
 	stop 'Error de dimensionamiento de Ecohesion'
 end if
 allocate (Ephi(ndatosresis),stat=IEphi)
-if (IEphi.NE.0) 
+if (IEphi.NE.0) then
 	stop 'Error de dimensionamiento de Ephi'
 end if
 allocate (pesounit(ndatosresis),stat=Ipesounit)
-if (Ipesounit.NE.0) 
+if (Ipesounit.NE.0) then
 	stop 'Error de dimensionamiento de pesounit'
 end if
 allocate (potestrato(ndatosresis),stat=Ipotestrato)
-if (Ipotestrato.NE.0) 
+if (Ipotestrato.NE.0) then
 	stop 'Error de dimensionamiento de potestrato'
 end if
-read(1,*) basura %Clay cliff erosion resistance-UCS [100-550 KPa]; Effective cohesion(KPa); Effective friction angle (ï¿½); Unit weight(KN/m**3); Strata depth (m)
-for i = 1, ndatosresis
+read(1,*) basura !Clay cliff erosion resistance-UCS [100-550 KPa]; Effective cohesion(KPa); Effective friction angle (º); Unit weight(KN/m**3); Strata depth (m)
+do i = 1, ndatosresis
 	read(1,*) sigmac(i),Shearstrength(i),Ecohesion(i),Ephi(i),pesounit(i),potestrato(i)
 end do
 
-read(1,*) basura %Debris Mobility Coeff. (m**2/day)
+read(1,*) basura !Debris Mobility Coeff. (m**2/day)
 read(1,*) Mf
 
 write(*,*)'Great_lake_v.1 - Bluff clay lakes profiles recesion'
 
-%Bluff initial profile (m) [1:Study point; 2:Talus wedge; 3:Seepage point]
+!Bluff initial profile (m) [1:Study point; 2:Talus wedge; 3:Seepage point]
 read(1,*) basura
 k=0
 nlabel=0
 10 continue
 k=k+1
 read(1,*,end=20) Pzy(1,k),Pzy(2,k),Pzy(3,k)
-if(Pzy(3,k) == 1.) nlabel=nlabel+1
+if(Pzy(3,k).eq.1.) nlabel=nlabel+1
 go to 10
 20 continue
 NG=k-1
@@ -213,51 +213,51 @@ close(1)
 
 select case(Utsim)
 	case(1)
-		%Simulation time: month
+		!Simulation time: month
 		tsim=tsim
 	case(2)
-		%Simulation time: years*months(12)
+		!Simulation time: years*months(12)
 		tsim=tsim*12
 end select
 
 select case(UTdib)
 	case(1)
-		%Result output time: month
+		!Result output time: month
 		Tdib=Tdib
 	case(2)
-		%Result output time: years*months(12)
+		!Result output time: years*months(12)
 		Tdib=Tdib*12
 end select
 
-%Orientation factor
-if (Pzy(2,1) < Pzy(2,2)) 
+!Orientation factor
+if (Pzy(2,1).LT.Pzy(2,2)) then
 	Factor = 1.0
-elseif (Pzy(2,1) > Pzy(2,2))
+else if (Pzy(2,1).GT.Pzy(2,2))then
 	Factor = -1.0
 end if
 
-%Number of geometry discretization points
-NPrefino = fix(abs(Pzy(1,1)-Pzy(1,NG))/Dz)
+!Number of geometry discretization points
+NPrefino = int(abs(Pzy(1,1)-Pzy(1,NG))/Dz)
 
-%Creation of PzyRglobal -> profile points possitions matrix
+!Creation of PzyRglobal -> profile points possitions matrix
 allocate (PzyRglobal(2,NPrefino),stat=IPzyRglobal)
-if (IPzyRglobal.NE.0) 
+if (IPzyRglobal.NE.0) then
 	stop 'Dimension failure: PzyRglobal'
 end if
 
-%First point coordenates
+!First point coordenates
 PzyRglobal(1,1) = Pzy(1,1)
 PzyRglobal(2,1) = Pzy(2,1)
-%Last point coordenates
+!Last point coordenates
 PzyRglobal(1,NPrefino) = Pzy(1,NG)
 PzyRglobal(2,NPrefino) = Pzy(2,NG)
 
-%Coordenates matrix PzyRglobal for initial profile
-for k = 2,NPrefino-1
+!Coordenates matrix PzyRglobal for initial profile
+do k = 2,NPrefino-1
 	PzyRglobal(1,k) = PzyRglobal(1,k-1) - Dz
-	for ibusqueda = 2,NG
-		if (Pzy(1,ibusqueda) < PzyRglobal(1,k)) 
-			if (Pzy(2,ibusqueda) == Pzy(2,ibusqueda-1)) 
+	do ibusqueda = 2,NG
+		if (Pzy(1,ibusqueda).LT.PzyRglobal(1,k)) then
+			if (Pzy(2,ibusqueda).EQ.Pzy(2,ibusqueda-1)) then
 				PzyRglobal(2,k) = Pzy(2,ibusqueda)
 			else
 				PzyRglobal(2,k) = (PzyRglobal(1,k)-Pzy(1,ibusqueda-1))/(Pzy(1,ibusqueda)-Pzy(1,ibusqueda-1))&
@@ -269,38 +269,38 @@ for k = 2,NPrefino-1
 	21 continue		
 end do
 
-%Localization of 1:Study point; 2:Talus wedge; 3:Seepage point; 4:Talus base point => roturanotch
+!Localization of 1:Study point; 2:Talus wedge; 3:Seepage point; 4:Talus base point => roturanotch
 ilabel=0
-for ibusqueda=2,NG
-    % 1:Study point
-    if(Pzy(3,ibusqueda) == 1.)
-       for k=1,NPrefino
-	      if(PzyRglobal(1,k) < Pzy(1,ibusqueda)) 
+do ibusqueda=2,NG
+    ! 1:Study point
+    if(Pzy(3,ibusqueda).EQ.1.)then
+       do k=1,NPrefino
+	      if(PzyRglobal(1,k).LT.Pzy(1,ibusqueda)) then
 		     ilabel=ilabel+1
 			 label(ilabel)=k
 			 goto 22
 		  end if
 	   end do
-    % 2:Talus wedge
-	elseif(Pzy(3,ibusqueda) == 2.)
-	   for k=1,NPrefino
-	      if(PzyRglobal(1,k) < Pzy(1,ibusqueda)) 
+    ! 2:Talus wedge
+	else if(Pzy(3,ibusqueda).EQ.2.)then
+	   do k=1,NPrefino
+	      if(PzyRglobal(1,k).LT.Pzy(1,ibusqueda)) then
 		     crestatalud=k
 			 goto 22
 		  end if
 	   end do
-    % 3:Seepage point
-	elseif(Pzy(3,ibusqueda) == 3.)
-	   for k=1,NPrefino
-	      if(PzyRglobal(1,k) < Pzy(1,ibusqueda)) 
+    ! 3:Seepage point
+	else if(Pzy(3,ibusqueda).EQ.3.)then
+	   do k=1,NPrefino
+	      if(PzyRglobal(1,k).LT.Pzy(1,ibusqueda)) then
 		     seepagelevel=k
 			 goto 22
 		  end if
 	   end do
-	% 4:Talus base point => roturanotch
-	elseif(Pzy(3,ibusqueda) == 4.)
-	   for k=1,NPrefino
-	      if(PzyRglobal(1,k) < Pzy(1,ibusqueda)) 
+	! 4:Talus base point => roturanotch
+	else if(Pzy(3,ibusqueda).EQ.4.)then
+	   do k=1,NPrefino
+	      if(PzyRglobal(1,k).LT.Pzy(1,ibusqueda)) then
 		     roturanotch=k-1
 			 goto 22
 		  end if
@@ -309,541 +309,541 @@ for ibusqueda=2,NG
 	22 continue
 end do
 
-%Profile location: Zero value
-for j=1,NPrefino
-	if (PzyRglobal(1,j) <= 0) 
+!Profile location: Zero value
+do j=1,NPrefino
+	if (PzyRglobal(1,j).LE.0.d0) then
 		goto 23
 	end if	
 end do
 23 continue
-zerolevel = j-1 %zero or first negative value
+zerolevel = j-1 !zero or first negative value
 
-%Profile location: Tidal level (m above/below zero) 
-for j=1,NPrefino
-	if (PzyRglobal(1,j) <= (PzyRglobal(1,zerolevel)+lakelevel)) 
+!Profile location: Tidal level (m above/below zero) 
+do j=1,NPrefino
+	if (PzyRglobal(1,j).LE.(PzyRglobal(1,zerolevel)+lakelevel)) then
 		goto 24
 	end if	
 end do
 24 continue
-TL = j %TL or first value below it
+TL = j !TL or first value below it
 controllevel = TL
 
-%Drawing counter
+!Drawing counter
 j = 1
 jdibujo = 1
-%Number of drawings and matrix drawing dimension
-DimDiby = fix(tsim/Tdib)
+!Number of drawings and matrix drawing dimension
+DimDiby = int(tsim/Tdib)
 
-%Creation of DibMatriz -> Erosive profiles matrix
+!Creation of DibMatriz -> Erosive profiles matrix
 allocate (DibMatriz(NPrefino+1,DimDiby+2),stat=IDibMatriz)
-if (IDibMatriz.NE.0) 
+if (IDibMatriz.NE.0) then
 	stop 'Dimension failure: DibMatriz'
 end if
 
-%Creation of Matrizrotura -> Failure profiles matrix
+!Creation of Matrizrotura -> Failure profiles matrix
 allocate (Matrizrotura(NPrefino+1,2),stat=IMatrizrotura)
-if (IMatrizrotura.NE.0) 
+if (IMatrizrotura.NE.0) then
 	stop 'Dimension failure: Matrizrotura'
 end if
 
-%Creation of Matrizrecesion -> Diference in possitions before-after failure
+!Creation of Matrizrecesion -> Diference in possitions before-after failure
 allocate (Matrizrecesion(NPrefino+2,2),stat=IMatrizrecesion)
-if (IMatrizrecesion.NE.0) 
+if (IMatrizrecesion.NE.0) then
 	stop 'Dimension failure: Matrizrecesion'
 end if
 
-%Erosive profiles matrix, first two columns
-DibMatriz(1,1) = rn %Run number
-DibMatriz(1,2) = 0. %
-for i=1,NPrefino
+!Erosive profiles matrix, first two columns
+DibMatriz(1,1) = rn !Run number
+DibMatriz(1,2) = 0. !
+do i=1,NPrefino
 	DibMatriz(i+1,1) = PzyRGlobal(1,i)
 	DibMatriz(i+1,2) = PzyRGlobal(2,i)
 end do
 
-%Failure profiles matrix, first two columns
-Matrizrotura(1,1) = rn %Run number
-Matrizrotura(1,2) = 0. %
-for i=1,NPrefino
+!Failure profiles matrix, first two columns
+Matrizrotura(1,1) = rn !Run number
+Matrizrotura(1,2) = 0. !
+do i=1,NPrefino
 	Matrizrotura(i+1,1) = PzyRGlobal(1,i)
 	Matrizrotura(i+1,2) = PzyRGlobal(2,i)
 end do
 
-%Recession values, first two columns
-Matrizrecesion(1,1) = 1. %run number
-Matrizrecesion(1,2) = 0. %
-Matrizrecesion(2,1) = 0. %Area erosionada originalmente
-Matrizrecesion(2,2) = 0. %
-for i=1,NPrefino
+!Recession values, first two columns
+Matrizrecesion(1,1) = 1. !run number
+Matrizrecesion(1,2) = 0. !
+Matrizrecesion(2,1) = 0. !Area erosionada originalmente
+Matrizrecesion(2,2) = 0. !
+do i=1,NPrefino
 	Matrizrecesion(i+2,1) = PzyRGlobal(1,i)
 	Matrizrecesion(i+2,2) = PzyRGlobal(2,i)
 end do
 
-%Specific weight of fresh water for landslide stability evaluation - KN/m**3
+!Specific weight of fresh water for landslide stability evaluation - KN/m**3
 freshwater=9.81
 
-%Density of seawater for Surf stress (SF) evaluation - Kg/m**3
+!Density of seawater for Surf stress (SF) evaluation - Kg/m**3
 seawater=1030
 
-%Initialization of variables
-volacumulado=0
-volacumulado1=0
-volacumulado2=0
-changelakelevel=0 %Interannual change in lake levels -> 1: YES; 2: NO until equilibrium conditions
-ciclo=0 %Number of months for a complete cicle in lake level change
-Dprot=0
+!Initialization of variables
+volacumulado=0.d0
+volacumulado1=0.d0
+volacumulado2=0.d0
+changelakelevel=0 !Interannual change in lake levels -> 1: YES; 2: NO until equilibrium conditions
+ciclo=0 !Number of months for a complete cicle in lake level change
+Dprot=0.d0
 Pmonth=0
-Drem=0
+Drem=0.d0
 parametrorotura=0
-retroceso=0.5
+retroceso=0.5d0
 salto=1
 counter=1
 Draw13=0
 Draw14=0
-invierno=1 %1: winter YES; 2:winter NO
-pendientetgPcirc1=dtan(1.*pi/180.) %Possitive because is going up
-%Vertical lines to calculate the intersection between the circular failure and the real profile
-mcirculo=0
-nslides=5
+invierno=1 !1: winter YES; 2:winter NO
+pendientetgPcirc1=dtan(1.*pi/180.) !Possitive because is going up
+!Vertical lines to calculate the intersection between the circular failure and the real profile
+mcirculo=0.d0
+nslides=5.d0
     
-%Groundwater calculus to print it
-if (groundwater == 0) 
-    for i=1,1000
-        distancia(i) = 0
-        Hwdraw(i) = 0
+!Groundwater calculus to print it
+if (groundwater.EQ.0) then
+    do i=1,1000
+        distancia(i) = 0.d0
+        Hwdraw(i) = 0.d0
     end do
     go to 64
-elseif (groundwater == 1) 
+else if (groundwater.EQ.1) then
     Profseepage = dabs(PzyRglobal(1,seepagelevel)-PzyRglobal(1,1))
     Longitud = dabs(PzyRglobal(2,seepagelevel)-PzyRglobal(2,1))
     dist = longitud/1000.
-    for i=1,1000
+    do i=1,1000
         distancia(i) = PzyRglobal(2,seepagelevel) - (i-1)*dist
     end do
-    for i=1,1000
+    do i=1,1000
         Hwdraw(i) = dsqrt((dabs(distancia(i)-PzyRglobal(2,seepagelevel))/longitud)*(Profseepage-Profagua)**2) + PzyRglobal(1,seepagelevel)
     end do
 end if
 64 continue
 
-%Creation of Hwdraw matrix -> Groundwater level draw
+!Creation of Hwdraw matrix -> Groundwater level draw
 allocate (MatrizHwdraw(1000+1,2),stat=IMatrizHwdraw)
-if (IMatrizHwdraw.NE.0) 
+if (IMatrizHwdraw.NE.0) then
     stop 'Dimension failure: MatrizHwdraw'
 end if
 
-%Groundwater levels matrix, first two columns
-MatrizHwdraw(1,1) = rn %Run number
-MatrizHwdraw(1,2) = 0
-for i=1,1000
+!Groundwater levels matrix, first two columns
+MatrizHwdraw(1,1) = rn !Run number
+MatrizHwdraw(1,2) = 0.d0
+do i=1,1000
     MatrizHwdraw(i+1,1) = Hwdraw(i)
 	MatrizHwdraw(i+1,2) = distancia(i)
 end do
 
-%WAVES CONDITIONS WINTER
+!WAVES CONDITIONS WINTER
 Waves = 1
 
-%Creation of H vector -> Deep water wave height
+!Creation of H vector -> Deep water wave height
 allocate (H(Waves),stat=IH)
-if (IH.NE.0) 
+if (IH.NE.0) then
     stop 'Dimension failure: Deep water wave height (H)'
 end if
-%Introduction of the Deep water wave height values
-H(1) = 0
+!Introduction of the Deep water wave height values
+H(1) = 0.d0
 
-%Creation of T vector -> Wave period
+!Creation of T vector -> Wave period
 allocate (T(Waves),stat=IT)
-if (IT.NE.0) 
+if (IT.NE.0) then
     stop 'Dimension failure: Wave period (T)'
 end if
-%Introduction of the Wave period values
-T(1) = 0
+!Introduction of the Wave period values
+T(1) = 0.d0
 
-%Creation of L vector -> Deep water wave length
+!Creation of L vector -> Deep water wave length
 allocate (L(Waves),stat=IL)
-if (IL.NE.0) 
+if (IL.NE.0) then
     stop 'Dimension failure: Deep water wave length (L)'
 end if
-%Calculation of the Deep water wave length values
-L(1) = 1.56*(T(1)**2) %Units: [m] - CERC (2002)
+!Calculation of the Deep water wave length values
+L(1) = 1.56*(T(1)**2) !Units: [m] - CERC (2002)
 
-%Creation of WF vector -> Percentage frecuency of each type of wave per day
+!Creation of WF vector -> Percentage frecuency of each type of wave per day
 allocate (WF(Waves),stat=IWF)
-if (IWF.NE.0) 
+if (IWF.NE.0) then
     stop 'Dimension failure: Percentage frecuency of each type of wave (WF)'
 end if
-%Introduction of the Percentage frecuency of each type of wave 
-WF(1) = 0
+!Introduction of the Percentage frecuency of each type of wave 
+WF(1) = 0.d0
 
-%Creation of Wn vector -> The number of waves each hour
+!Creation of Wn vector -> The number of waves each hour
 allocate (Wn(Waves),stat=IWn)
-if (IWn.NE.0) 
+if (IWn.NE.0) then
     stop 'Dimension failure: The number of waves each hour (Wn)'
 end if
-%Calculation of the The number of waves each hour 
-Wn(1) = (60*60)/T(1) %60 s/min * 60 min/hours
+!Calculation of the The number of waves each hour 
+Wn(1) = (60*60)/T(1) !60 s/min * 60 min/hours
 
 call cpu_time(tic)
 call seed(iseed)
 
-%INIZILIZATION OF THE TGLOB VARIABLE
+!INIZILIZATION OF THE TGLOB VARIABLE
 Tglob = 1
 
-%Erosion - Recession DO-WHILE LOOP that allow to modify the Tglob variable
-500 IF (Tglob <= tsim) 
+!Erosion - Recession DO-WHILE LOOP that allow to modify the Tglob variable
+500 IF (Tglob.LE.tsim) THEN
 
-    %Write in commands window time steep (days)
+    !Write in commands window time steep (days)
     write(*,'(''Time steep: '',i8)')Tglob
 
-    if (invierno == 1) 
+    if (invierno.EQ.1) then
         salto = salto + counter
-        if (Tglob == (3*(salto-2)+1)) 
-            Tglob = Tglob+2 %From left side to right one
-            Draw13 = 1 %Drawn from left side
-            Draw14 = 0 %Drawn from center
-        elseif (((3*(salto-2)+1) < Tglob) && (Tglob < 3*(salto-1))) 
-            Tglob = Tglob+1 %From center to right side
-            Draw13 = 0 %Drawn from left side
-            Draw14 = 1 %Drawn from center
+        if (Tglob.EQ.(3*(salto-2)+1)) then
+            Tglob = Tglob+2 !From left side to right one
+            Draw13 = 1 !Drawn from left side
+            Draw14 = 0 !Drawn from center
+        else if (((3*(salto-2)+1).LT.Tglob).and.(Tglob.LT.3*(salto-1))) then
+            Tglob = Tglob+1 !From center to right side
+            Draw13 = 0 !Drawn from left side
+            Draw14 = 1 !Drawn from center
         else
-            Draw13 = 0 %Drawn from left side
-            Draw14 = 0 %Drawn from center
+            Draw13 = 0 !Drawn from left side
+            Draw14 = 0 !Drawn from center
         end if
         
-        %Counter re-inizialization
-        if (counter == 4) 
+        !Counter re-inizialization
+        if (counter.EQ.4) then
             counter=1
         end if
        
-        %SPRING waves conditions
-        Waves = 4 %Number of waves in the season SPRING
-        %Creation of H vector -> Deep water wave height
+        !SPRING waves conditions
+        Waves = 4 !Number of waves in the season SPRING
+        !Creation of H vector -> Deep water wave height
         deallocate (H)
         allocate (H(Waves))
-        %Creation of T vector -> Wave period
+        !Creation of T vector -> Wave period
         deallocate (T)
         allocate (T(Waves))
-        %Creation of L vector -> Deep water wave length
+        !Creation of L vector -> Deep water wave length
         deallocate (L)
         allocate (L(Waves))
-        %Creation of WF vector -> Percentage frecuency of each type of wave per day
+        !Creation of WF vector -> Percentage frecuency of each type of wave per day
         deallocate (WF)
         allocate (WF(Waves))
-        %Creation of Wn vector -> The number of waves each hour
+        !Creation of Wn vector -> The number of waves each hour
         deallocate (Wn)
         allocate (Wn(Waves))
         
-        %Introduction of the Deep water wave height values
+        !Introduction of the Deep water wave height values
         H(1) = 0.5
         H(2) = 1
         H(3) = 2
         H(4) = 3
-        %Introduction of the Wave period values
+        !Introduction of the Wave period values
         T(1) = 2.
         T(2) = 3.5
         T(3) = 4.5
         T(4) = 5.5
-        %Calculation of the Deep water wave length values
-        for i=1,Waves
-            L(i) = 1.56*(T(i)**2) %Units: [m] - CERC (2002)
+        !Calculation of the Deep water wave length values
+        do i=1,Waves
+            L(i) = 1.56*(T(i)**2) !Units: [m] - CERC (2002)
         end do
-        %Introduction of the Percentage frecuency of each type of wave 
+        !Introduction of the Percentage frecuency of each type of wave 
         WF(1) = 33.03
         WF(2) = 36.33
         WF(3) = 2.23
         WF(4) = 0.1
-        %Total frecuency = 71.67 %
-        %Calculation of the The number of waves each hour 
-        for i=1,Waves
-            Wn(i) = (60*60)/T(i) %60 s/min * 60 min/hours
+        !Total frecuency = 71.67 %
+        !Calculation of the The number of waves each hour 
+        do i=1,Waves
+            Wn(i) = (60*60)/T(i) !60 s/min * 60 min/hours
         end do
         
-        %SPRING lake level
-        %TL = controllevel - fix(0.4/Dz) %Increase 0.4m is the value obtained from ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+        !SPRING lake level
+        !TL = controllevel - int(0.4/Dz) !Increase 0.4m is the value obtained from ARMY CORPS OF ENGINEERS - DETROIT District (2011)
         
-        if (Tglob >= tsim) 
-            if (Draw13 == 1) 
+        if (Tglob.GE.tsim) then
+            if (Draw13.EQ.1) then
                 Draw = Tglob-2
-                for j=Draw,tsim
-                    %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                    if ((j == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                    %Time vectors to introduce in the matrix
-		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-    	                %Transfer the position information matrix into DRAWING MATRIX
-		                for i=1,NPrefino
+                do j=Draw,tsim
+                    !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                    if ((j.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                    !Time vectors to introduce in the matrix
+		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+    	                !Transfer the position information matrix into DRAWING MATRIX
+		                do i=1,NPrefino
     	                    DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                    end do
    		                jdibujo = jdibujo + 1
                     end if
                 end do
-                go to 1000 %End of simulation
-            elseif (Draw14 == 1) 
+                go to 1000 !End of simulation
+            else if (Draw14.EQ.1) then
                 Draw = Tglob-1
-                for j=Draw,tsim
-                    %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                    if ((j == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                    %Time vectors to introduce in the matrix
-		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-    	                %Transfer the position information matrix into DRAWING MATRIX
-		                for i=1,NPrefino
+                do j=Draw,tsim
+                    !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                    if ((j.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                    !Time vectors to introduce in the matrix
+		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+    	                !Transfer the position information matrix into DRAWING MATRIX
+		                do i=1,NPrefino
     	                    DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                    end do
    		                jdibujo = jdibujo + 1
                     end if
                 end do
-                go to 1000 %End of simulation
+                go to 1000 !End of simulation
             else
-                %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                if ((Tglob == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                %Time vectors to introduce in the matrix
-		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-    	            %Transfer the position information matrix into DRAWING MATRIX
-		            for i=1,NPrefino
+                !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                if ((Tglob.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                !Time vectors to introduce in the matrix
+		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+    	            !Transfer the position information matrix into DRAWING MATRIX
+		            do i=1,NPrefino
     	                DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                end do
    		            jdibujo = jdibujo + 1
                 end if
-                go to 1000 %End of simulation
+                go to 1000 !End of simulation
             end if
-        elseif (Tglob < tsim) 
-            if (Draw13 == 1) 
+        else if (Tglob.LT.tsim) then
+            if (Draw13.EQ.1) then
                 Draw = Tglob-2
-                for j=Draw,Tglob
-                    %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                    if ((j == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                    %Time vectors to introduce in the matrix
-		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-    	                %Transfer the position information matrix into DRAWING MATRIX
-		                for i=1,NPrefino
+                do j=Draw,Tglob
+                    !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                    if ((j.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                    !Time vectors to introduce in the matrix
+		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+    	                !Transfer the position information matrix into DRAWING MATRIX
+		                do i=1,NPrefino
     	                    DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                    end do
    		                jdibujo = jdibujo + 1
                     end if
                 end do
-                go to 1001 %Loops end before -> invierno =0
-            elseif (Draw14 == 1) 
+                go to 1001 !Loops end before -> invierno =0
+            else if (Draw14.EQ.1) then
                 Draw = Tglob-1
-                for j=Draw,Tglob
-                    %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                    if ((j == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                    %Time vectors to introduce in the matrix
-		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-    	                %Transfer the position information matrix into DRAWING MATRIX
-		                for i=1,NPrefino
+                do j=Draw,Tglob
+                    !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                    if ((j.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                    !Time vectors to introduce in the matrix
+		                DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+    	                !Transfer the position information matrix into DRAWING MATRIX
+		                do i=1,NPrefino
     	                    DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                    end do
    		                jdibujo = jdibujo + 1
                     end if
                 end do
-                go to 1001 %Loops end before -> invierno =0
+                go to 1001 !Loops end before -> invierno =0
             else
-                %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                if ((Tglob == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                %Time vectors to introduce in the matrix
-		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-    	            %Transfer the position information matrix into DRAWING MATRIX
-		            for i=1,NPrefino
+                !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                if ((Tglob.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                !Time vectors to introduce in the matrix
+		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+    	            !Transfer the position information matrix into DRAWING MATRIX
+		            do i=1,NPrefino
     	                DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                end do
    		            jdibujo = jdibujo + 1
                 end if
-                go to 1001 %Loops end before -> invierno =0
+                go to 1001 !Loops end before -> invierno =0
             end if
         end if
     end if
     
-    %Allocate BEACH from 1 to Number of waves
+    !Allocate BEACH from 1 to Number of waves
     allocate (BEACH(Waves),stat=IBEACH)
-    if (IBEACH.NE.0) 
+    if (IBEACH.NE.0) then
         stop 'Dimension failure: Beach angle'
     end if
-    for i = 1,Waves
-        BEACH(i) = 0
+    do i = 1,Waves
+        BEACH(i) = 0.d0
     end do
-    %Allocate TER to NPrefino
+    !Allocate TER to NPrefino
     allocate (TER(NPrefino),stat=ITER)
-    if (ITER.NE.0) 
+    if (ITER.NE.0) then
         stop 'Dimension failure: TER or Total Shear erosion'
     end if
-    %Allocate TRunup to NPrefino
+    !Allocate TRunup to NPrefino
     allocate (TRunup(NPrefino),stat=ITRunup)
-    if (ITRunup.NE.0) 
+    if (ITRunup.NE.0) then
         stop 'Dimension failure: TRunup or Total Run-up erosion'
     end if
     allocate (aux5(2,NPrefino))
-    for j = 1,NPrefino
-        TER(j) = 0
-        TRunup(j) = 0
+    do j = 1,NPrefino
+        TER(j) = 0.d0
+        TRunup(j) = 0.d0
         aux5(2,j) = PzyRglobal(2,j)   
     end do
     
-    %Variables initialization
-    Ey = 0
+    !Variables initialization
+    Ey = 0.d0
     
-    %Erosion module Trenhaile (2009) - Coastal Engineering
-    for i = 1,Waves %From wave 1 to Number of waves within the season
+    !Erosion module Trenhaile (2009) - Coastal Engineering
+    do i = 1,Waves !From wave 1 to Number of waves within the season
     
-        %Calculate HEIGHT OF SHOALING WAVES
-        DA = L(i)/2 %Depth = 0.5 * wave length - CERC (2002)
-        %Integer part of the depth converted to DZ size steep 
-        DB = fix(DA/Dz)
-        %DC is the vertical k value for the onset of shallow water (very deep)
+        !Calculate HEIGHT OF SHOALING WAVES
+        DA = L(i)/2 !Depth = 0.5 * wave length - CERC (2002)
+        !Integer part of the depth converted to DZ size steep 
+        DB = int(DA/Dz)
+        !DC is the vertical k value for the onset of shallow water (very deep)
         DC = TL + DB
      
-        %Allocate WH to NPrefino
+        !Allocate WH to NPrefino
         allocate (WH(NPrefino),stat=IWH)
-        if (IWH.NE.0) 
+        if (IWH.NE.0) then
             stop 'Dimension failure: WH'
         end if
-        for j = 1,NPrefino
-            WH(j) = 0
+        do j = 1,NPrefino
+            WH(j) = 0.d0
         end do
         
-        for j = DC,TL,-1
-            %Calculate n for group wave velocity
-            hL = (j-TL)*Dz/L(i) %h/L0 -> h:water depth
-            if (hL > 0.25) 
-                LL = L(i) %wavelength in deep water
-                WH(j) = H(i) %wave height in deep water
+        do j = DC,TL,-1
+            !Calculate n for group wave velocity
+            hL = (j-TL)*Dz/L(i) !h/L0 -> h:water depth
+            if (hL.GT.0.25d0) then
+                LL = L(i) !wavelength in deep water
+                WH(j) = H(i) !wave height in deep water
                 go to 62
-            elseif ((hL <= 0.25) && (hL > 0.05)) 
-                DD = (dexp(2*pi*hL)-dexp(-2*pi*hL))/(dexp(2*pi*hL)+dexp(-2*pi*hL))
-                LL = L(i)*dsqrt(DD) %wavelength in intermediate depths is determined using the CEM (2002) equation
+            else if ((hL.LE.0.25d0).AND.(hL.GT.0.05d0)) then
+                DD = (dexp(2.d0*pi*hL)-dexp(-2.d0*pi*hL))/(dexp(2.d0*pi*hL)+dexp(-2.d0*pi*hL))
+                LL = L(i)*dsqrt(DD) !wavelength in intermediate depths is determined using the CEM (2002) equation
                 go to  61
-            elseif (hL <= 0.05) 
-                LL = T(i)*dsqrt(9.81*(j-TL)*Dz) %wavelength in shallow depths is determined using the CEM (2002) equation
+            else if (hL.LE.0.05d0) then
+                LL = T(i)*dsqrt(9.81d0*(j-TL)*Dz) !wavelength in shallow depths is determined using the CEM (2002) equation
                 go to 61
             end if
             61 continue
-            OO = 2*2*pi*(j-TL)*Dz/LL %2*k*h -> k = 2*pi/L
-            NN = (dexp(OO)-dexp(-OO))/2
-            n = 0.5*(1+(OO/NN)) %n for group wave velocity
+            OO = 2.d0*2.d0*pi*(j-TL)*Dz/LL !2*k*h -> k = 2*pi/L
+            NN = (dexp(OO)-dexp(-OO))/2.d0
+            n = 0.5d0*(1.d0+(OO/NN)) !n for group wave velocity
             
-            %Calculate wave height at and outside the breakers and breaker depth
-            if ((hL <= 0.25) && (hL > 0.05)) 
-                DD1 = (dexp(2*3.14*(j-TL)*Dz/LL)-dexp(-2*3.14*(j-TL)*Dz/LL))/(dexp(2*3.14*(j-TL)*Dz/LL)+dexp(-2*3.14*(j-TL)*Dz/LL))
-                WH(j) = H(i)*dsqrt(L(i)/(2*T(i)*n*(9.81*T(i)*DD1/(2*3.14)))) %H=H0*sqrt(C0/2*C*n) -> C0=L0/T ; C=(g*T/2*pi)*tanh(2*pi*h/L)
-            elseif (hL <= 0.05) 
-                WH(j) = H(i)*dsqrt(L(i)/(2*T(i)*n*dsqrt(9.81*(j-TL)*Dz))) %H=H0*sqrt(C0/2*C*n) -> C0=L0/T ; C=sqrt(g*h)
+            !Calculate wave height at and outside the breakers and breaker depth
+            if ((hL.LE.0.25d0).AND.(hL.GT.0.05d0)) then
+                DD1 = (dexp(2.d0*3.14*(j-TL)*Dz/LL)-dexp(-2.d0*3.14*(j-TL)*Dz/LL))/(dexp(2.d0*3.14*(j-TL)*Dz/LL)+dexp(-2.d0*3.14*(j-TL)*Dz/LL))
+                WH(j) = H(i)*dsqrt(L(i)/(2.d0*T(i)*n*(9.81d0*T(i)*DD1/(2.d0*3.14)))) !H=H0*sqrt(C0/2*C*n) -> C0=L0/T ; C=(g*T/2*pi)*tanh(2*pi*h/L)
+            else if (hL.LE.0.05) then
+                WH(j) = H(i)*dsqrt(L(i)/(2.d0*T(i)*n*dsqrt(9.81d0*(j-TL)*Dz))) !H=H0*sqrt(C0/2*C*n) -> C0=L0/T ; C=sqrt(g*h)
             end if
             62 continue   
-            if (WH(j) >= (j-TL)*Dz/1.28)  %Hb >= h/1.28 -> breaking exists
-                WBD = (int(WH(j)*1.28*10))/10 %WBD is actual wave breaker depth (metres) -> hb = 1.28*Hb
-                HB = WH(j) %mean breaker height
+            if (WH(j).GE.(j-TL)*Dz/1.28d0) then !Hb >= h/1.28 -> breaking exists
+                WBD = (int(WH(j)*1.28d0*10.d0))/10.d0 !WBD is actual wave breaker depth (metres) -> hb = 1.28*Hb
+                HB = WH(j) !mean breaker height
                 go to 63
             end if
         end do
         
         63 continue
-        %Calcuate the LENGTH OF THE SURF ZONE (SZ)
-        BD = fix(WBD/Dz) + TL %Corresponding i-value for WBD
-        SZ = PzyRglobal(2,BD) - PzyRglobal(2,TL) %length
+        !Calcuate the LENGTH OF THE SURF ZONE (SZ)
+        BD = int(WBD/Dz) + TL !Corresponding i-value for WBD
+        SZ = PzyRglobal(2,BD) - PzyRglobal(2,TL) !length
         
-        %Calculate WAVE HEIGHT IN SURF ZONE
-        for j = BD-1,TL,-1
+        !Calculate WAVE HEIGHT IN SURF ZONE
+        do j = BD-1,TL,-1
             
-            GR = 0
-            if (SZ == 0) 
+            GR = 0.d0
+            if (SZ.EQ.0.d0) then
                 go to 58        
             end if
-            %Calculate SLOPE OF THE SURF ZONE
-            u1 = PzyRglobal(2,BD) - PzyRglobal(2,j) %Horizontal length from BD to j
-		    u2 = PzyRglobal(1,BD) - PzyRglobal(1,j) %Vertical distance from BD to j
+            !Calculate SLOPE OF THE SURF ZONE
+            u1 = PzyRglobal(2,BD) - PzyRglobal(2,j) !Horizontal length from BD to j
+		    u2 = PzyRglobal(1,BD) - PzyRglobal(1,j) !Vertical distance from BD to j
 		    GR = dabs(u2/u1)
             
             58 continue
-            if (PzyRglobal(2,j) == PzyRglobal(2,BD)) 
+            if (PzyRglobal(2,j).EQ.PzyRglobal(2,BD)) then
                 WH(j) = HB
                 go to 60
             else
-                WH(j) = HB*dexp((-35.2*(dabs(PzyRglobal(2,BD)-PzyRglobal(2,j)))*GR)/(T(i)*dsqrt(9.81*WBD)))
+                WH(j) = HB*dexp((-35.2d0*(dabs(PzyRglobal(2,BD)-PzyRglobal(2,j)))*GR)/(T(i)*dsqrt(9.81d0*WBD)))
             end if
             60 continue
         end do
         
-        %Determine BEACH FACE GRADIENT (BEACH(i))(RADIANS)
-        VVV =  HB/((9.81**0.5)*(Gs**0.5)*T(i)) %Sunamuraï¿½s expression (1989)
+        !Determine BEACH FACE GRADIENT (BEACH(i))(RADIANS)
+        VVV =  HB/((9.81**0.5)*(Gs**0.5)*T(i)) !Sunamura´s expression (1989)
         BEACH(i) = datan(0.12/(VVV**0.5))
         
-        %Determine BEACH SHAPE AND VOLUME for each wave type
-        %Profile location: Tidal level + Hb -> Maximun height to find a beach berm
-        LimWB = round((PzyRglobal(1,TL)+HB)*10)
-        %LimWB = round((PzyRglobal(1,TL))*10)
-        LimWBmax = LimWB/10
-        for j=1,BD
-            aux2 = round(PzyRglobal(1,j)*10)
-            aux2 =aux2/10
-	        if (aux2 <= LimWBmax) 
-	        %if (PzyRglobal(1,j) <= (PzyRglobal(1,TL)+HB)) 
+        !Determine BEACH SHAPE AND VOLUME for each wave type
+        !Profile location: Tidal level + Hb -> Maximun height to find a beach berm
+        LimWB = nint((PzyRglobal(1,TL)+HB)*10.d0)
+        !LimWB = nint((PzyRglobal(1,TL))*10.d0)
+        LimWBmax = LimWB/10.d0
+        do j=1,BD
+            aux2 = nint(PzyRglobal(1,j)*10.d0)
+            aux2 =aux2/10.d0
+	        if (aux2.LE.LimWBmax) then
+	        !if (PzyRglobal(1,j).LE.(PzyRglobal(1,TL)+HB)) then
 		        go to 59
 	        end if	
         end do
         59 continue
-        WBmax = j %WBmax or Berm Width maximun
-        %LimWB = round((PzyRglobal(1,TL)+HB)*10)
+        WBmax = j !WBmax or Berm Width maximun
+        !LimWB = nint((PzyRglobal(1,TL)+HB)*10.d0)
         
         Beachpoint = 0
         BaseBeach = 0
         Berm = 0
         
-        if (Qb == 0)  %No volume for beach
+        if (Qb.EQ.0.d0) then !No volume for beach
             Beachpoint = 0
             BaseBeach = 0
-            Playa = 2 %No beach exist
+            Playa = 2 !No beach exist
             go to 30
-        elseif (Qb.NE.0)     
-            %Determine location and volume
-            for j=BD,TL,-1 %%%%%%%%%%%%%%%%%%%%ojo es TL
-                if (PzyRglobal(2,j) == PzyRglobal(2,j-1))  %vertical platform
-                    Plat = pi/2 % pi/2 in Rad -> 90 degrees
+        else if (Qb.NE.0.d0) then    
+            !Determine location and volume
+            do j=BD,TL,-1 !!!!!!!!!!!!!!!!!!!!ojo es TL
+                if (PzyRglobal(2,j).EQ.PzyRglobal(2,j-1)) then !vertical platform
+                    Plat = pi/2.d0 ! pi/2 in Rad -> 90 degrees
                     Beachpoint = 0
                     BaseBeach = 0
-                    Playa = 2 %No beach exist
-                    go to 25 %In the case the bottom point can varies from BD to TL
-                    %go to 30 %Beach cannot create from BD
+                    Playa = 2 !No beach exist
+                    go to 25 !In the case the bottom point can varies from BD to TL
+                    !go to 30 !Beach cannot create from BD
                 else
-                    Plat = datan(Dz/(PzyRglobal(2,j)-PzyRglobal(2,j-1))) % Slope of the shore platform
+                    Plat = datan(Dz/(PzyRglobal(2,j)-PzyRglobal(2,j-1))) ! Slope of the shore platform
                 end if
                 
-                %Determine height HWB from j to WBmax
+                !Determine height HWB from j to WBmax
                 HWB = dabs(PzyRglobal(1,WBmax)-PzyRglobal(1,j))
-                %Determine horizontal distance DWB from j to WBmax
+                !Determine horizontal distance DWB from j to WBmax
                 DWB = dabs(PzyRglobal(2,WBmax)-PzyRglobal(2,j))
                 
-                if (BEACH(i) <= Plat) 
+                if (BEACH(i).LE.Plat) then
                     Beachpoint = 0
                     BaseBeach = 0
-                    Playa = 2 %No beach exist
-                    go to 25 %In the case the bottom point can varies from BD to TL
-                    %go to 30 %Beach cannot create from BD
+                    Playa = 2 !No beach exist
+                    go to 25 !In the case the bottom point can varies from BD to TL
+                    !go to 30 !Beach cannot create from BD
                 end if
                 
                 Inter = 2
-                %Determine intersection point
-                for 26 k=j-1,WBmax+1,-1
-                    %Determine directorï¿½s vector for each point
+                !Determine intersection point
+                do 26 k=j-1,WBmax+1,-1
+                    !Determine director´s vector for each point
 			        u1 = PzyRglobal(2,k-1) - PzyRglobal(2,k)
 			        u2 = PzyRglobal(1,k-1) - PzyRglobal(1,k)
-				    %Profile slope
-			        if (u1 == 0) 
-			    	    mcliff = 0
+				    !Profile slope
+			        if (u1.EQ.0.d0) then
+			    	    mcliff = 0.d0
 			        else
 			    	    mcliff = u2/u1
 			        end if
-				    %Cross points between BEACH and CLIFF
+				    !Cross points between BEACH and CLIFF
 				    mbeach = - datan(BEACH(i))
 			   	    Yc = ((PzyRglobal(1,k)-mcliff*PzyRglobal(2,k)) - (PzyRglobal(1,j) - (mbeach)*PzyRglobal(2,j)))/((mbeach)-mcliff)
 					Zc = (mbeach)*Yc + PzyRglobal(1,j) - (mbeach)*PzyRglobal(2,j)
-				    %Lambda paratemer that determines the presence or not of the cross point
-			    	if (mcliff == 0) 
+				    !Lambda paratemer that determines the presence or not of the cross point
+			    	if (mcliff.EQ.0.d0) then
 			    	    lambda = (Zc - PzyRglobal(1,k))/u2
 			    	else
 			    	    lambda = (Yc - PzyRglobal(2,k))/u1
 			    	end if
-				    %Coordenate of cross point if it exists
-			    	if ((lambda >= 0.0) && (lambda < 1.0)) 
-			   	        Inter = k %i-position of intersection point
+				    !Coordenate of cross point if it exists
+			    	if ((lambda.GE.0.0).AND.(lambda.LT.1.0)) then
+			   	        Inter = k !i-position of intersection point
 			       	    go to 27
-			    	elseif (lambda == 1.0) 
+			    	else if (lambda.EQ.1.0) then
 			    	    Inter = k-1
 			    		go to 27
 			    	else
@@ -852,303 +852,303 @@ Tglob = 1
 			    26 continue
                 27 continue
                                 
-                if (((BEACH(i)*DWB) < HWB).or.(PzyRglobal(1,Inter) < PzyRglobal(1,WBmax)))  
-                    %Point below WBmax
-                    BE = PzyRglobal(2,Inter) %X-coordenate of beachpoint
+                if (((BEACH(i)*DWB).LT.HWB).or.(PzyRglobal(1,Inter).LT.PzyRglobal(1,WBmax))) then 
+                    !Point below WBmax
+                    BE = PzyRglobal(2,Inter) !X-coordenate of beachpoint
                     HWB = dabs(PzyRglobal(1,Inter)-PzyRglobal(1,j))
                     DWB = dabs(PzyRglobal(2,Inter)-PzyRglobal(2,j))
                     Beachpoint = Inter
-                elseif (((BEACH(i)*DWB) == HWB).or.(PzyRglobal(1,Inter) == PzyRglobal(1,WBmax)))  %Point equal to WBmax
-                    Beachpoint = WBmax %i-position of intersection point
-                    BE = PzyRglobal(2,WBmax) %X-coordenate of beachpoint
-                elseif (((BEACH(i)*DWB) > HWB).or.(PzyRglobal(1,Inter) > PzyRglobal(1,WBmax)))  %Point above WBmax -> beach berm and NO erosion
-                    Beachpoint = WBmax %for vertical position
-                    BE = PzyRglobal(2,j) - (HWB/dtan(BEACH(i))) %X-coordenate of beachpoint
-                    Berm = 1 %No impact erosion
-%                    Beachpoint = 0
-%                    BaseBeach = 0
-%                    Playa = 2
-%                    Berm = 0
-%                    go to 25
+                else if (((BEACH(i)*DWB).EQ.HWB).or.(PzyRglobal(1,Inter).EQ.PzyRglobal(1,WBmax))) then !Point equal to WBmax
+                    Beachpoint = WBmax !i-position of intersection point
+                    BE = PzyRglobal(2,WBmax) !X-coordenate of beachpoint
+                else if (((BEACH(i)*DWB).GT.HWB).or.(PzyRglobal(1,Inter).GT.PzyRglobal(1,WBmax))) then !Point above WBmax -> beach berm and NO erosion
+                    Beachpoint = WBmax !for vertical position
+                    BE = PzyRglobal(2,j) - (HWB/dtan(BEACH(i))) !X-coordenate of beachpoint
+                    Berm = 1 !No impact erosion
+!                    Beachpoint = 0
+!                    BaseBeach = 0
+!                    Playa = 2
+!                    Berm = 0
+!                    go to 25
                 end if
                 
-                %VOLUME determination
-                a = 0
-                b = 0
-                e = 0
-                BX = 0
-                a = DWB*HWB %Rectangular maximun element
-                b = 0.5*HWB*(PzyRglobal(2,j)-BE) %Triangle above profile
-                e = 0.5*Dz*dabs(PzyRglobal(2,j-1)-PzyRglobal(2,j)) %First profile above slope
+                !VOLUME determination
+                a = 0.d0
+                b = 0.d0
+                e = 0.d0
+                BX = 0.d0
+                a = DWB*HWB !Rectangular maximun element
+                b = 0.5d0*HWB*(PzyRglobal(2,j)-BE) !Triangle above profile
+                e = 0.5d0*Dz*dabs(PzyRglobal(2,j-1)-PzyRglobal(2,j)) !First profile above slope
                 TB = 0
                 CT = 0
                 M = 0
-                for k = j-1,Beachpoint+1,-1
-                    if (k < (M-1))
+                do k = j-1,Beachpoint+1,-1
+                    if (k.LT.(M-1))then
                         go to 28
-                    elseif (k == (M-1)) 
+                    else if (k.EQ.(M-1)) then
                         M = 0
-                    elseif (PzyRglobal(2,k) == PzyRglobal(2,k-1)) 
-                        %Calculate Position (CT) of top of a vertical section
-                        for M = k+1,Beachpoint,-1
-                            if (PzyRglobal(2,M).NE.PzyRglobal(2,k)) 
+                    else if (PzyRglobal(2,k).EQ.PzyRglobal(2,k-1)) then
+                        !Calculate Position (CT) of top of a vertical section
+                        do M = k+1,Beachpoint,-1
+                            if (PzyRglobal(2,M).NE.PzyRglobal(2,k)) then
                                 go to 29
                             else
-                                CT = M %If itï¿½s vertical no volumen in available
+                                CT = M !If it´s vertical no volumen in available
                             end if
                         end do
                         go to 28
                     end if
                     29 continue
-                    BX = 0.5*Dz*dabs(PzyRglobal(2,k)-PzyRglobal(2,k-1)) + (j-k)*Dz*dabs(PzyRglobal(2,k)-PzyRglobal(2,k-1)) %Below the profile -> triangle + rectangle 
-                    TB = TB + BX %Total volume below the profile
+                    BX = 0.5d0*Dz*dabs(PzyRglobal(2,k)-PzyRglobal(2,k-1)) + (j-k)*Dz*dabs(PzyRglobal(2,k)-PzyRglobal(2,k-1)) !Below the profile -> triangle + rectangle 
+                    TB = TB + BX !Total volume below the profile
                     28 continue
                 end do
                 
-                %TOTAL beach volume
+                !TOTAL beach volume
                 TOTAL = a - (b + e + TB)
                 BaseBeach = j
                 Playa = 1
                 
-                if (Qb >= TOTAL) 
-                    go to 30 %Beach is ok
-                elseif (Qb < TOTAL) 
+                if (Qb.GE.TOTAL) then
+                    go to 30 !Beach is ok
+                else if (Qb.LT.TOTAL) then
                     Berm = 0
-                    go to 25 %We need to find a beach less deeper
+                    go to 25 !We need to find a beach less deeper
                 end if
                 25 continue
             end do
         end if
         30 continue
         
-        if ((Basebeach == Beachpoint+1)) 
-            %In case extremelly small beach is formed
+        if ((Basebeach.EQ.Beachpoint+1)) then
+            !In case extremelly small beach is formed
             Playa = 2
             Berm = 0
         end if
 
-        %NUMBER OF EACH TYPE OF WAVE at the tidal level per day - Trenhaile (2009) Fig.3
-        %Non-tidal body of water, tidal duration just for one vertical value (TL) and is equal to the number of hours in a month
-        No = Wn(i)*(WF(i)/100)*24*(30-Dprot)
+        !NUMBER OF EACH TYPE OF WAVE at the tidal level per day - Trenhaile (2009) Fig.3
+        !Non-tidal body of water, tidal duration just for one vertical value (TL) and is equal to the number of hours in a month
+        No = Wn(i)*(WF(i)/100.d0)*24.d0*(30.d0-Dprot)
         
-        %Allocate ER to NPrefino
+        !Allocate ER to NPrefino
         allocate (ER(NPrefino),stat=IER)
-        if (IER.NE.0) 
+        if (IER.NE.0) then
             stop 'Dimension failure: ER or Shear erosion'
         end if
-        %Allocate Runup to NPrefino
+        !Allocate Runup to NPrefino
         allocate (Runup(NPrefino),stat=IRunup)
-        if (IRunup.NE.0) 
+        if (IRunup.NE.0) then
             stop 'Dimension failure: Runup or Run-up erosion'
         end if
-        for j = 1,NPrefino
-            ER(j) = 0
-            Runup(j) = 0
+        do j = 1,NPrefino
+            ER(j) = 0.d0
+            Runup(j) = 0.d0
         end do
         
-        %Determine SHEAR STRESS EROSION
-        for j=DC,TL+1,-1
-            Su = 0 %Wave set-up in the surf zone Su
-            Sd = 0 %Wave set-down at and outside the breakers
-            hL = (j-TL)*Dz/L(i) %h/L0 -> h:water depth
+        !Determine SHEAR STRESS EROSION
+        do j=DC,TL+1,-1
+            Su = 0.d0 !Wave set-up in the surf zone Su
+            Sd = 0.d0 !Wave set-down at and outside the breakers
+            hL = (j-TL)*Dz/L(i) !h/L0 -> h:water depth
             
-            if (hL > 0.25)  %If j is deeper than hL > 0.25 -> NO erosion
-                ER(j) = 0 %Erosion by shear
+            if (hL.GT.0.25d0) then !If j is deeper than hL > 0.25 -> NO erosion
+                ER(j) = 0.d0 !Erosion by shear
                 go to 31
-            elseif ((hL <= 0.25) && (hL > 0.05))  %If j is between 0.25 > hL > 0.05 -> Maximum bottom orbital velocity Uo
-                if (j > BD) 
-                    XX = 2*3.1416*(j-TL)*Dz/L(i)
+            else if ((hL.LE.0.25d0).AND.(hL.GT.0.05d0)) then !If j is between 0.25 > hL > 0.05 -> Maximum bottom orbital velocity Uo
+                if (j.GT.BD) then
+                    XX = 2*3.1416d0*(j-TL)*Dz/L(i)
                     YY = (dexp(XX)-dexp(-XX))/(dexp(XX)+dexp(-XX))
-                    Lb = L(i)*dsqrt(YY) %Wavelength
-                    HH = 2*2*3.1416*(j-TL)*Dz/Lb
-                    II = (dexp(HH)-dexp(-HH))/2
-                    Sd = 3.1416*(WH(j)**2)/(4*Lb*II) %Set-down
-                    GG = 2*3.1416*((j-TL)*Dz-Sd)/Lb
-                    EE = (dexp(GG)-dexp(-GG))/2
-                    Uo = 3.1416*WH(j)/(T(i)*EE) %Maximum bottom orbital velocity
+                    Lb = L(i)*dsqrt(YY) !Wavelength
+                    HH = 2.d0*2.d0*3.1416d0*(j-TL)*Dz/Lb
+                    II = (dexp(HH)-dexp(-HH))/2.d0
+                    Sd = 3.1416d0*(WH(j)**2)/(4*Lb*II) !Set-down
+                    GG = 2*3.1416d0*((j-TL)*Dz-Sd)/Lb
+                    EE = (dexp(GG)-dexp(-GG))/2.d0
+                    Uo = 3.1416d0*WH(j)/(T(i)*EE) !Maximum bottom orbital velocity
                 end if
-            elseif (hL <= 0.05)  %If j is between hL < 0.05 -> Maximum bottom orbital velocity Uo
-                Lb = T(i)*dsqrt(9.81*(j-TL)*Dz) %Wavelength
-                HH = 2*2*3.1416*(j-TL)*Dz/Lb
-                II = (dexp(HH)-dexp(-HH))/2
-                Sd = 3.1416*(WH(j)**2)/(4*Lb*II) %Set-down
-                Uo = (WH(j)/2)*dsqrt(9.81/((j-TL)*Dz-Sd)) %Maximum bottom orbital velocity
+            else if (hL.LE.0.05d0) then !If j is between hL < 0.05 -> Maximum bottom orbital velocity Uo
+                Lb = T(i)*dsqrt(9.81d0*(j-TL)*Dz) !Wavelength
+                HH = 2.d0*2.d0*3.1416d0*(j-TL)*Dz/Lb
+                II = (dexp(HH)-dexp(-HH))/2.d0
+                Sd = 3.1416d0*(WH(j)**2)/(4*Lb*II) !Set-down
+                Uo = (WH(j)/2.d0)*dsqrt(9.81d0/((j-TL)*Dz-Sd)) !Maximum bottom orbital velocity
             end if
             
-            if ((j < BD) && (PzyRglobal(2,j) < PzyRglobal(2,BD))) 
-                Su = 0.185767*(WBD/SZ)*(PzyRglobal(2,BD)-PzyRglobal(2,j)) %Set-up
-                Uo = (WH(j)/2)*dsqrt(9.81/((j-TL)*Dz+Su)) %Maximum bottom orbital velocity
-            elseif ((j < BD) && (PzyRglobal(2,j) == PzyRglobal(2,BD))) 
-                Su = 0
-                Uo = (WH(j)/2)*dsqrt(9.81/((j-TL)*Dz)) %Maximum bottom orbital velocity
+            if ((j.LT.BD).and.(PzyRglobal(2,j).LT.PzyRglobal(2,BD))) then
+                Su = 0.185767d0*(WBD/SZ)*(PzyRglobal(2,BD)-PzyRglobal(2,j)) !Set-up
+                Uo = (WH(j)/2.d0)*dsqrt(9.81d0/((j-TL)*Dz+Su)) !Maximum bottom orbital velocity
+            else if ((j.LT.BD).and.(PzyRglobal(2,j).EQ.PzyRglobal(2,BD))) then
+                Su = 0.d0
+                Uo = (WH(j)/2.d0)*dsqrt(9.81d0/((j-TL)*Dz)) !Maximum bottom orbital velocity
             end if
             
-            if (Playa == 1)  %Beach present
-                if (TL < Beachpoint)  %Lake level above beach
-                    if ((j <= DC) && (j >= BaseBeach)) 
+            if (Playa.EQ.1) then !Beach present
+                if (TL.LT.Beachpoint) then !Lake level above beach
+                    if ((j.LE.DC).and.(j.GE.BaseBeach)) then
                         Fw = 0.0034
-                        SS = (1/2)*Fw*seawater*(Uo**2)
+                        SS = (1/2.d0)*Fw*seawater*(Uo**2)
                         ER(j) = No*Kss*((SS-SFmin)**p)
-                    elseif ((j < Beachpoint) && (j > TL)) 
+                    else if ((j.LT.Beachpoint).and.(j.GT.TL)) then
                         Fw = 0.0034
-                        SS = (1/2)*Fw*seawater*(Uo**2)
+                        SS = (1/2.d0)*Fw*seawater*(Uo**2)
                         ER(j) = No*Kss*((SS-SFmin)**p)
                     end if
-                elseif (TL >= Beachpoint)  %Lake level within the beach or under
-                    if ((j <= DC) && (j >= BaseBeach)) 
+                else if (TL.GE.Beachpoint) then !Lake level within the beach or under
+                    if ((j.LE.DC).and.(j.GE.BaseBeach)) then
                         Fw = 0.0034
-                        SS = (1/2)*Fw*seawater*(Uo**2)
+                        SS = (1/2.d0)*Fw*seawater*(Uo**2)
                         ER(j) = No*Kss*((SS-SFmin)**p)
                     end if
                 end if
-            elseif (Playa == 2)  %No beach is present
-                if (j > TL)  %Security => loop just until TL-1
+            else if (Playa.EQ.2) then !No beach is present
+                if (j.GT.TL) then !Security => loop just until TL-1
                     Fw = 0.0034
-                    SS = (1/2)*Fw*seawater*(Uo**2)
+                    SS = (1/2.d0)*Fw*seawater*(Uo**2)
                     ER(j) = No*Kss*((SS-SFmin)**p)
                 end if
             end if
             31 continue
         end do
         
-        %Determine EROSION FOR WAVE IMPACT + RUN-UP
-        if (Playa == 1)  %Beach present
-            aux2 = round(PzyRglobal(1,Beachpoint)*10)
-            aux2 =aux2/10
-            %if (PzyRglobal(1,Beachpoint) >= (HB+PzyRglobal(1,TL)))  %No run-up
-            if (aux2 >= (LimWBmax))  %No run-up
-                Runup(Beachpoint) = 0
-            %elseif (PzyRglobal(1,Beachpoint) < (HB+PzyRglobal(1,TL)))  %Run-up exists in Beachpoint
-            elseif (aux2 < (LimWBmax))  %Run-up exists in Beachpoint
-                %Rs = ((PzyRglobal(1,TL)+HB)-PzyRglobal(1,Beachpoint))/dtan(Beach(i))
+        !Determine EROSION FOR WAVE IMPACT + RUN-UP
+        if (Playa.EQ.1) then !Beach present
+            aux2 = nint(PzyRglobal(1,Beachpoint)*10.d0)
+            aux2 =aux2/10.d0
+            !if (PzyRglobal(1,Beachpoint).GE.(HB+PzyRglobal(1,TL))) then !No run-up
+            if (aux2.GE.(LimWBmax)) then !No run-up
+                Runup(Beachpoint) = 0.d0
+            !else if (PzyRglobal(1,Beachpoint).LT.(HB+PzyRglobal(1,TL))) then !Run-up exists in Beachpoint
+            else if (aux2.LT.(LimWBmax)) then !Run-up exists in Beachpoint
+                !Rs = ((PzyRglobal(1,TL)+HB)-PzyRglobal(1,Beachpoint))/dtan(Beach(i))
                 Rs = ((LimWBmax)-PzyRglobal(1,Beachpoint))/dtan(Beach(i))
                 Runup(Beachpoint) = No*Cb*Bmat*(KRs*Rs-Rsc)
             end if
-            if ((TL > Beachpoint) && (TL < Basebeach))  %No impact erosion
-                Ey = Ey + 0
+            if ((TL.GT.Beachpoint).and.(TL.LT.Basebeach)) then !No impact erosion
+                Ey = Ey + 0.d0
                 go to 32
-            elseif (TL <= Beachpoint) 
-                Runup(Beachpoint) = 0
-                if (berm == 1) 
-                    Ey = Ey + 0 %No impact erosion due to berm size
+            else if (TL.LE.Beachpoint) then
+                Runup(Beachpoint) = 0.d0
+                if (berm.EQ.1) then
+                    Ey = Ey + 0.d0 !No impact erosion due to berm size
                     go to 32
                 end if
             end if
-        elseif (Playa == 2)  %No beach is present
-%            if ((TL > roturanotch) && (PzyRglobal(1,roturanotch) < (PzyRglobal(1,TL)+HB)))  %Below roturanotch and below TL+HB
-%                XX = dabs((PzyRglobal(1,roturanotch)-PzyRglobal(1,TL))/(PzyRglobal(2,roturanotch)- PzyRglobal(2,TL)))
-%                Rs = ((PzyRglobal(1,TL)+HB)-PzyRglobal(1,roturanotch))/XX
-%                Runup(roturanotch) = No*Cb*Bmat*(KRs*Rs-Rsc)
-%            elseif (TL <= roturanotch)  %No Run-up is possible
-                Runup(roturanotch) = 0
-%            end if
+        else if (Playa.EQ.2) then !No beach is present
+!            if ((TL.GT.roturanotch).and.(PzyRglobal(1,roturanotch).LT.(PzyRglobal(1,TL)+HB))) then !Below roturanotch and below TL+HB
+!                XX = dabs((PzyRglobal(1,roturanotch)-PzyRglobal(1,TL))/(PzyRglobal(2,roturanotch)- PzyRglobal(2,TL)))
+!                Rs = ((PzyRglobal(1,TL)+HB)-PzyRglobal(1,roturanotch))/XX
+!                Runup(roturanotch) = No*Cb*Bmat*(KRs*Rs-Rsc)
+!            else if (TL.LE.roturanotch) then !No Run-up is possible
+                Runup(roturanotch) = 0.d0
+!            end if
         end if
-        if (SZ == 0) 
+        if (SZ.EQ.0.d0) then
             Fb = 512.61*(HB/0.78)
         else
             Fb = 512.61*(HB/0.78)*dexp(-SZ*0.05)
         end if
-        Energy = 0
-        Energy = No*MMM*(Fb-WFmin) %Erosion value for impact for each wave
-        if (Energy < 0) 
-            Energy = 0
+        Energy = 0.d0
+        Energy = No*MMM*(Fb-WFmin) !Erosion value for impact for each wave
+        if (Energy.LT.0.d0) then
+            Energy = 0.d0
         end if
-        Ey = Ey + Energy %Accumulative value for impact erosion for all waves
+        Ey = Ey + Energy !Accumulative value for impact erosion for all waves
         32 continue
         
-        %Determine CUMULATIVE VALUES FOR ALL KINDS OF EROSION
-        for j=1,NPrefino
-            if (ER(j) <= 0) 
-                ER(j) = 0
+        !Determine CUMULATIVE VALUES FOR ALL KINDS OF EROSION
+        do j=1,NPrefino
+            if (ER(j).LE.0.d0) then
+                ER(j) = 0.d0
             end if
-            if (Runup(j) <= 0) 
-                Runup(j) = 0
+            if (Runup(j).LE.0.d0) then
+                Runup(j) = 0.d0
             end if
-            TER(j) = TER(j)+ER(j) %TER is the sum of all waves type
-            TRunup(j) = TRunup(j)+Runup(j) %TRunup is the sum of all run-up possibilities
+            TER(j) = TER(j)+ER(j) !TER is the sum of all waves type
+            TRunup(j) = TRunup(j)+Runup(j) !TRunup is the sum of all run-up possibilities
         end do
         
-        %Deallocate WH for the next wave conditions
+        !Deallocate WH for the next wave conditions
         deallocate(WH)
-        %Deallocate ER for the next wave conditions
+        !Deallocate ER for the next wave conditions
         deallocate(ER)
-        %Deallocate Runup for the next wave conditions
+        !Deallocate Runup for the next wave conditions
         deallocate(Runup)  
     end do
     
-    %Determine NEW VECTOR POSSITIONS after EROSIVE processes
-    for j=1,NPrefino
-        PzyRglobal(2,j) = PzyRglobal(2,j)-TER(j)-TRunup(j) %New possitions after TER and TRunup
+    !Determine NEW VECTOR POSSITIONS after EROSIVE processes
+    do j=1,NPrefino
+        PzyRglobal(2,j) = PzyRglobal(2,j)-TER(j)-TRunup(j) !New possitions after TER and TRunup
     end do
-    PzyRglobal(2,TL) = PzyRglobal(2,TL)-Ey %New possitions after Ey
+    PzyRglobal(2,TL) = PzyRglobal(2,TL)-Ey !New possitions after Ey
         
-    %Deallocate TER for the next erosive steep
+    !Deallocate TER for the next erosive steep
     deallocate(TER)
-    %Deallocate TRunup for the next erosive steep
+    !Deallocate TRunup for the next erosive steep
     deallocate(TRunup)
-    %Deallocate BEACH for the next erosive time
+    !Deallocate BEACH for the next erosive time
     deallocate(BEACH)
    
-    %Determination of CRITICAL POINTS
+    !Determination of CRITICAL POINTS
     ptosup = crestatalud
     ptoinf = TL
-    for j=crestatalud,TL-1 %Calculate the first inflection point going down
-        if (PzyRglobal(2,j+1) >= PzyRglobal(2,j)) 
+    do j=crestatalud,TL-1 !Calculate the first inflection point going down
+        if (PzyRglobal(2,j+1).GE.PzyRglobal(2,j)) then
             ptosup = j
         else
-            ptosup = j+1 %Upper inflection point
+            ptosup = j+1 !Upper inflection point
             go to 33
         end if
     end do
-    if (ptosup == (TL))  %No inflextion point exist above lake level
+    if (ptosup.EQ.(TL)) then !No inflextion point exist above lake level
         go to 34 
     end if
     33 continue
 
-    for j=TL,crestatalud+1,-1 %Calculate the first inflection point going up
-        if (PzyRglobal(2,j-1) <= PzyRglobal(2,j)) 
+    do j=TL,crestatalud+1,-1 !Calculate the first inflection point going up
+        if (PzyRglobal(2,j-1).LE.PzyRglobal(2,j)) then
             ptoinf = j-1
         else
-            ptoinf = j %Lower inflection point
+            ptoinf = j !Lower inflection point
             go to 35
         end if
     end do
-    if (ptoinf == crestatalud)  %No inflextion point exist above lake level
+    if (ptoinf.EQ.crestatalud) then !No inflextion point exist above lake level
         go to 34 
     end if
     35 continue
     
     34 continue
-    if (ptosup == ptoinf) 
-        Upperpoint = ptoinf %When both points are the same
-        if (ptosup == TL) 
+    if (ptosup.EQ.ptoinf) then
+        Upperpoint = ptoinf !When both points are the same
+        if (ptosup.EQ.TL) then
             Upperpoint = roturanotch
-            if(PzyRglobal(2,roturanotch) > PzyRglobal(2,ptosup)) 
+            if(PzyRglobal(2,roturanotch).GT.PzyRglobal(2,ptosup)) then
                 Upperpoint = ptoinf
             end if
         end if
-    elseif (ptosup.NE.ptoinf) 
-        %Erosive points
+    else if (ptosup.NE.ptoinf) then
+        !Erosive points
 	    allocate (yerosionmax(ptoinf-ptosup+1),stat=Iyerosionmax)
-	    if (Iyerosionmax.NE.0) 
+	    if (Iyerosionmax.NE.0) then
 	        stop 'Dimension failure: yerosionmax'
 	    end if
-	    %Most erosionated point between ptoinf-ptosup
-	    for i=ptosup,ptoinf
+	    !Most erosionated point between ptoinf-ptosup
+	    do i=ptosup,ptoinf
 		    yerosionmax(i-ptosup+1)=PzyRglobal(2,i)
 		end do
 		ptodibujo = minloc(yerosionmax)
-		Upperpoint = ptodibujo(1) + ptosup - 1 %i-possition of the most erosionated point between ptoinf-ptosup
+		Upperpoint = ptodibujo(1) + ptosup - 1 !i-possition of the most erosionated point between ptoinf-ptosup
 	    deallocate (yerosionmax)
     end if
     
-    %Determination of the Lower critical point below lake level    
+    !Determination of the Lower critical point below lake level    
     Lowerpoint = DC
-    for j=DC,TL+1,-1 %Calculate the inflection point going up under water level
-        if (PzyRglobal(2,j-1) <= PzyRglobal(2,j)) 
+    do j=DC,TL+1,-1 !Calculate the inflection point going up under water level
+        if (PzyRglobal(2,j-1).LE.PzyRglobal(2,j)) then
             go to 36
         else
-            Lowerpoint = j %Lower inflection point
+            Lowerpoint = j !Lower inflection point
             go to 37
         end if
         36 continue
@@ -1158,62 +1158,62 @@ Tglob = 1
     allocate (aux3(2,NPrefino))
     allocate (aux4(2,NPrefino))
     allocate (aux6(NPrefino))
-    for j=1,NPrefino
+    do j=1,NPrefino
         aux3(2,j) = PzyRglobal(2,j)
         aux4(2,j) = PzyRglobal(2,j)
         aux6(j) = PzyRglobal(2,j)
     end do
     
-    %CALCULATION OF THE NEW PROFILE IF NECESSARY
-    if (Lowerpoint == DC)  %No inflection point below sea level
-        %No change in possition vector
+    !CALCULATION OF THE NEW PROFILE IF NECESSARY
+    if (Lowerpoint.EQ.DC) then !No inflection point below sea level
+        !No change in possition vector
         roturanotch = Upperpoint
         go to 38 
-    elseif (Lowerpoint.NE.DC) 
-        if ((Lowerpoint == Upperpoint) && (Lowerpoint <= roturanotch)) 
-            %No change in possition vector
+    else if (Lowerpoint.NE.DC) then
+        if ((Lowerpoint.EQ.Upperpoint).and.(Lowerpoint.LE.roturanotch)) then
+            !No change in possition vector
             roturanotch = Lowerpoint
             go to 38
-        elseif ((Lowerpoint == Upperpoint) && (Lowerpoint > roturanotch))  %Failure from Lowerpoint to roturanotch
-            if (PzyRglobal(2,roturanotch) < PzyRglobal(2,Lowerpoint)) 
-                %Failure to the left
-%                mrecta = (PzyRglobal(1,roturanotch)-PzyRglobal(1,Lowerpoint))/(PzyRglobal(2,roturanotch)-PzyRglobal(2,Lowerpoint))
-%                for j=Lowerpoint,roturanotch,-1
-%	                PzyRglobal(2,j) = (PzyRglobal(1,j) + mrecta*PzyRglobal(2,Lowerpoint) - PzyRglobal(1,Lowerpoint))/mrecta
-%	            end do
-            elseif (PzyRglobal(2,roturanotch) == PzyRglobal(2,Lowerpoint)) 
-                %Vertical failure
-%                for j=Lowerpoint,roturanotch,-1
-%                    PzyRglobal(2,j) = PzyRglobal(2,Lowerpoint) 
-%                end do
-                roturanotch = Lowerpoint %New failure possition or cliff base possition
-            elseif (PzyRglobal(2,roturanotch) > PzyRglobal(2,Lowerpoint)) 
-                %Failure to the right
-%                mrecta = (PzyRglobal(1,roturanotch)-PzyRglobal(1,Lowerpoint))/(PzyRglobal(2,roturanotch)-PzyRglobal(2,Lowerpoint))
-%                for j=Lowerpoint,roturanotch,-1
-%	                PzyRglobal(2,j) = (PzyRglobal(1,j) + mrecta*PzyRglobal(2,Lowerpoint) - PzyRglobal(1,Lowerpoint))/mrecta
-%	            end do
-	            roturanotch = Lowerpoint %New failure possition or cliff base possition
+        else if ((Lowerpoint.EQ.Upperpoint).and.(Lowerpoint.GT.roturanotch)) then !Failure from Lowerpoint to roturanotch
+            if (PzyRglobal(2,roturanotch).LT.PzyRglobal(2,Lowerpoint)) then
+                !Failure to the left
+!                mrecta = (PzyRglobal(1,roturanotch)-PzyRglobal(1,Lowerpoint))/(PzyRglobal(2,roturanotch)-PzyRglobal(2,Lowerpoint))
+!                do j=Lowerpoint,roturanotch,-1
+!	                PzyRglobal(2,j) = (PzyRglobal(1,j) + mrecta*PzyRglobal(2,Lowerpoint) - PzyRglobal(1,Lowerpoint))/mrecta
+!	            end do
+            else if (PzyRglobal(2,roturanotch).EQ.PzyRglobal(2,Lowerpoint)) then
+                !Vertical failure
+!                do j=Lowerpoint,roturanotch,-1
+!                    PzyRglobal(2,j) = PzyRglobal(2,Lowerpoint) 
+!                end do
+                roturanotch = Lowerpoint !New failure possition or cliff base possition
+            else if (PzyRglobal(2,roturanotch).GT.PzyRglobal(2,Lowerpoint)) then
+                !Failure to the right
+!                mrecta = (PzyRglobal(1,roturanotch)-PzyRglobal(1,Lowerpoint))/(PzyRglobal(2,roturanotch)-PzyRglobal(2,Lowerpoint))
+!                do j=Lowerpoint,roturanotch,-1
+!	                PzyRglobal(2,j) = (PzyRglobal(1,j) + mrecta*PzyRglobal(2,Lowerpoint) - PzyRglobal(1,Lowerpoint))/mrecta
+!	            end do
+	            roturanotch = Lowerpoint !New failure possition or cliff base possition
             end if
-        elseif (Lowerpoint.NE.Upperpoint) 
-            if (PzyRglobal(2,Upperpoint) < PzyRglobal(2,Lowerpoint)) 
-                %Failure to the left
+        else if (Lowerpoint.NE.Upperpoint) then
+            if (PzyRglobal(2,Upperpoint).LT.PzyRglobal(2,Lowerpoint)) then
+                !Failure to the left
                 roturanotch = Upperpoint
                 mrecta = (PzyRglobal(1,Upperpoint)-PzyRglobal(1,Lowerpoint))/(PzyRglobal(2,Upperpoint)-PzyRglobal(2,Lowerpoint))
-                for j=Lowerpoint,Upperpoint,-1
+                do j=Lowerpoint,Upperpoint,-1
 	                aux3(2,j) = (PzyRglobal(1,j) + mrecta*PzyRglobal(2,Lowerpoint) - PzyRglobal(1,Lowerpoint))/mrecta
 	            end do
-            elseif (PzyRglobal(2,Upperpoint) == PzyRglobal(2,Lowerpoint)) 
-                %Vertical failure
-                roturanotch = Lowerpoint %New failure possition or cliff base possition
-                for j=Lowerpoint,Upperpoint,-1
+            else if (PzyRglobal(2,Upperpoint).EQ.PzyRglobal(2,Lowerpoint)) then
+                !Vertical failure
+                roturanotch = Lowerpoint !New failure possition or cliff base possition
+                do j=Lowerpoint,Upperpoint,-1
                     aux3(2,j) = PzyRglobal(2,Lowerpoint) 
                 end do
-            elseif (PzyRglobal(2,Upperpoint) > PzyRglobal(2,Lowerpoint)) 
-                roturanotch = Lowerpoint %New failure possition or cliff base possition
-                %Failure to the right
+            else if (PzyRglobal(2,Upperpoint).GT.PzyRglobal(2,Lowerpoint)) then
+                roturanotch = Lowerpoint !New failure possition or cliff base possition
+                !Failure to the right
                 mrecta = (PzyRglobal(1,Upperpoint)-PzyRglobal(1,Lowerpoint))/(PzyRglobal(2,Upperpoint)-PzyRglobal(2,Lowerpoint))
-                for j=Lowerpoint,Upperpoint,-1
+                do j=Lowerpoint,Upperpoint,-1
 	                aux3(2,j) = (PzyRglobal(1,j) + mrecta*PzyRglobal(2,Lowerpoint) - PzyRglobal(1,Lowerpoint))/mrecta
 	            end do
             end if
@@ -1221,18 +1221,18 @@ Tglob = 1
     end if
     38 continue
     
-    %Correction in case the new profile "creates" material in the Platform
-    if (Lowerpoint.NE.Upperpoint) 
-        for j=Lowerpoint,Upperpoint,-1
-            if (aux3(2,j) > PzyRglobal(2,j)) 
+    !Correction in case the new profile "creates" material in the Platform
+    if (Lowerpoint.NE.Upperpoint) then
+        do j=Lowerpoint,Upperpoint,-1
+            if (aux3(2,j).GT.PzyRglobal(2,j)) then
                 mrecta = (PzyRglobal(1,zerolevel)-PzyRglobal(1,Lowerpoint))/(PzyRglobal(2,zerolevel)-PzyRglobal(2,Lowerpoint))
-                if (Lowerpoint == zerolevel) 
-                   mrecta = 1
+                if (Lowerpoint.EQ.zerolevel) then
+                   mrecta = 1.d0
                 end if
-                for i= Lowerpoint,zerolevel,-1
+                do i= Lowerpoint,zerolevel,-1
                     PzyRglobal(2,i) = (PzyRglobal(1,i) + mrecta*PzyRglobal(2,Lowerpoint) - PzyRglobal(1,Lowerpoint))/mrecta
-                    if ((aux6(i) < PzyRglobal(2,i)) && (i.NE.zerolevel) && (i.NE.Lowerpoint)) 
-                        for k=Lowerpoint,zerolevel,-1
+                    if ((aux6(i).LT.PzyRglobal(2,i)).and.(i.NE.zerolevel).and.(i.NE.Lowerpoint)) then
+                        do k=Lowerpoint,zerolevel,-1
                             PzyRglobal(2,k) = aux6(k)
                             go to 900
                         end do
@@ -1248,28 +1248,28 @@ Tglob = 1
     deallocate (aux3)
     deallocate (aux6)
     
-    %In case ptosup and ptoinf are not the same failure between them
-    if ((Upperpoint.NE.ptoinf) && (PzyRglobal(2,ptoinf) > PzyRglobal(2,Upperpoint))) 
+    !In case ptosup and ptoinf are not the same failure between them
+    if ((Upperpoint.NE.ptoinf).and.(PzyRglobal(2,ptoinf).GT.PzyRglobal(2,Upperpoint))) then
         mrecta = (PzyRglobal(1,Upperpoint)-PzyRglobal(1,ptoinf))/(PzyRglobal(2,Upperpoint)-PzyRglobal(2,ptoinf))
-        for i= ptoinf,Upperpoint,-1
+        do i= ptoinf,Upperpoint,-1
             aux4(2,i) = (PzyRglobal(1,i) + mrecta*PzyRglobal(2,ptoinf) - PzyRglobal(1,ptoinf))/mrecta    
         end do
-        %if the new profile "creates" material -> NO new profile appears and roturanotch is ptoinf
+        !if the new profile "creates" material -> NO new profile appears and roturanotch is ptoinf
         Dibujo = 1
-        if (aux5(2,Upperpoint) == aux4(2,Upperpoint)) 
+        if (aux5(2,Upperpoint).EQ.aux4(2,Upperpoint)) then
             Dibujo = 0
             roturanotch = ptoinf
             go to 901
         end if
-        for j=ptoinf,Upperpoint,-1
-            if (aux4(2,j) > PzyRglobal(2,j)) 
+        do j=ptoinf,Upperpoint,-1
+            if (aux4(2,j).GT.PzyRglobal(2,j)) then
                 Dibujo = 0
                 roturanotch = ptoinf
                 go to 901
             end if
         end do
-        if (Dibujo == 1) 
-            for i= ptoinf,Upperpoint,-1
+        if (Dibujo.EQ.1) then
+            do i= ptoinf,Upperpoint,-1
                 PzyRglobal(2,i) = aux4(2,i)    
             end do
         end if    
@@ -1278,41 +1278,41 @@ Tglob = 1
     deallocate (aux4)
     deallocate (aux5)
     
-    %LANDSLIDE FAILURE EVALUATION
+    !LANDSLIDE FAILURE EVALUATION
     1 Continue
-    %Second failure point (meter to meter)
+    !Second failure point (meter to meter)
     DistPcirc2 = PzyRglobal(2,roturanotch) - retroceso
-    %Determine intersection circular failure VS. cliff
-    for 39 i=roturanotch-1,2,-1
-        %Determine directorï¿½s vector for each point
+    !Determine intersection circular failure VS. cliff
+    do 39 i=roturanotch-1,2,-1
+        !Determine director´s vector for each point
         u1 = PzyRglobal(2,i-1) - PzyRglobal(2,i)
 	    u2 = PzyRglobal(1,i-1) - PzyRglobal(1,i)
-	    %Profile slope
-	    if (u1 == 0.0) 
+	    !Profile slope
+	    if (u1.EQ.0.0) then
 	        indvertcliff = 1
 	        mcliff = 0.0
         else
 		    indvertcliff = 0
 		    mcliff = u2/u1
         end if
-	    %Intersection points between circular failure and cliff
-	    if (mcliff == mcirculo) 
+	    !Intersection points between circular failure and cliff
+	    if (mcliff.EQ.mcirculo) then
 		    go to 39
-	    elseif (mcirculo == 0) 
+	    else if (mcirculo.EQ.0.d0) then
 		    XDistPcirc2 = DistPcirc2
 			YDistPcirc2 = mcliff*XDistPcirc2 + PzyRglobal(1,i) - mcliff*PzyRglobal(2,i)
 		end if
-	    %Lambda parameter that determine intersection point within the cliff
-		if (indvertcliff == 0.0) 
+	    !Lambda parameter that determine intersection point within the cliff
+		if (indvertcliff.EQ.0.0) then
 		    lambda = (XDistPcirc2 - PzyRglobal(2,i))/u1
 	    else
 		    lambda = (YDistPcirc2 - PzyRglobal(1,i))/u2
 		end if
-	    %Coordenate of cross point if it exists
-		if ((lambda >= 0.0) && (lambda < 1.0)) 
+	    !Coordenate of cross point if it exists
+		if ((lambda.GE.0.0).AND.(lambda.LT.1.0)) then
 		    PtocorteCirc2 = i
 			go to 40
-	    elseif (lambda == 1.0) 
+	    else if (lambda.EQ.1.0) then
 		    PtocorteCirc2 = i-1
 			go to 40
 		else
@@ -1321,100 +1321,100 @@ Tglob = 1
 	39 continue
 	40 continue
         		
-    %Cliff height from talus wedge and talus base point - roturanotch
+    !Cliff height from talus wedge and talus base point - roturanotch
 	Htalud = abs(PzyRglobal(1,crestatalud) - PzyRglobal(1,roturanotch))
         		
-	%Circular failure calculus limit -> when horizontal distance exceeds Htalud
-	if (DistPcirc2 < PzyRglobal(2,crestatalud)-Htalud) 
-	    go to 41 %No more circular failures can exist
+	!Circular failure calculus limit -> when horizontal distance exceeds Htalud
+	if (DistPcirc2.LT.PzyRglobal(2,crestatalud)-Htalud) then
+	    go to 41 !No more circular failures can exist
 	end if
         		
-    %Determine slope between bottom failure point VS. upper failure point
+    !Determine slope between bottom failure point VS. upper failure point
 	munion = (YDistPcirc2 - PzyRglobal(1,roturanotch))/(XDistPcirc2 - PzyRglobal(2,roturanotch))
         		
-    %Failure center coordenates (SIGN)
+    !Failure center coordenates (SIGN)
 	CXc = ((-PzyRglobal(2,roturanotch)/PendientetgPcirc1)-(PzyRglobal(1,roturanotch)/2.)+(YDistPcirc2/2.)-((-1/munion)*PzyRglobal(2,roturanotch)/2.)-((-1/munion)*XDistPcirc2/2.))/((-1/PendientetgPcirc1) + (1/munion))
 	CYc = (-1/PendientetgPcirc1)*(CXc - PzyRglobal(2,roturanotch)) + PzyRglobal(1,roturanotch)
         		
-    %Radius of a circunference
+    !Radius of a circunference
 	radio = dsqrt((CXc - PzyRglobal(2,roturanotch))**2 + (CYc - PzyRglobal(1,roturanotch))**2)
         		
-    %Slide size upper part (b)
+    !Slide size upper part (b)
 	anchoslide = dabs(XDistPcirc2 - PzyRglobal(2,roturanotch))/nslides
         		
-	%Inizialization of the numerator and denominator for Factor of Safety: FS
-	Num = 0
-	Deno = 0
+	!Inizialization of the numerator and denominator for Factor of Safety: FS
+	Num = 0.d0
+	Deno = 0.d0
         		
-    %Safety Factor
-	for i=1,nslides
-        %X-Coordenate of Right extreme
+    !Safety Factor
+	do i=1,nslides
+        !X-Coordenate of Right extreme
 		Xca = PzyRglobal(2,roturanotch) - (i-1)*anchoslide*Factor
-		%X-Coordenate of Left extreme
+		!X-Coordenate of Left extreme
 		Xcb = PzyRglobal(2,roturanotch) - i*anchoslide*Factor
-		%X-Coordenate of Medium slide point
+		!X-Coordenate of Medium slide point
 		Xmedio = (Xca+Xcb)/2.
         		    
-		%Y-Coordenate of Right extreme
+		!Y-Coordenate of Right extreme
 		Yopc1 = (2*CYc + dsqrt(4*CYc**2 + 4*(radio**2 - CXc**2 - Xca**2 + 2*CXc*Xca - CYc**2)))/2.
 		Yopc2 = (2*CYc - dsqrt(4*CYc**2 + 4*(radio**2 - CXc**2 - Xca**2 + 2*CXc*Xca - CYc**2)))/2.
-		%Choose the correct Y value -> the lowest one (bottom part of the circular failure)
-		if (Yopc1 < Yopc2) 
+		!Choose the correct Y value -> the lowest one (bottom part of the circular failure)
+		if (Yopc1.LT.Yopc2) then
 		    Yca = Yopc1
 		else
 		    Yca = Yopc2
 		end if
         		    
-		%Y-Coordenate of Left extreme
+		!Y-Coordenate of Left extreme
 		Yopc1 = (2*CYc + dsqrt(4*CYc**2 + 4*(radio**2 - CXc**2 - Xcb**2 + 2*CXc*Xcb - CYc**2)))/2.
 		Yopc2 = (2*CYc - dsqrt(4*CYc**2 + 4*(radio**2 - CXc**2 - Xcb**2 + 2*CXc*Xcb - CYc**2)))/2.
-		%Choose the correct Y value -> the lowest one (bottom part of the circular failure)
-		if (Yopc1 < Yopc2) 
+		!Choose the correct Y value -> the lowest one (bottom part of the circular failure)
+		if (Yopc1.LT.Yopc2) then
 		    Ycb = Yopc1
 		else
 		    Ycb = Yopc2
 		end if
         		    
-		%Y-Coordenate of Medium slide point
+		!Y-Coordenate of Medium slide point
 		Yopc1 = (2*CYc + dsqrt(4*CYc**2 + 4*(radio**2 - CXc**2 - Xmedio**2 + 2*CXc*Xmedio - CYc**2)))/2.
 		Yopc2 = (2*CYc - dsqrt(4*CYc**2 + 4*(radio**2 - CXc**2 - Xmedio**2 + 2*CXc*Xmedio - CYc**2)))/2.
-		%Choose the correct Y value -> the lowest one (bottom part of the circular failure)
-		if (Yopc1 < Yopc2) 
+		!Choose the correct Y value -> the lowest one (bottom part of the circular failure)
+		if (Yopc1.LT.Yopc2) then
 		    Ymedio = Yopc1
 		else
 		    Ymedio = Yopc2
 		end if
         		  
-		%Slope of medium slide point
+		!Slope of medium slide point
 		Mmedio = (CXc-Xmedio)/(Ymedio-CYc)
         		    
-		%Center slide angle
+		!Center slide angle
 		gamma = dabs((180/pi)*datan(Mmedio))
         		    
-		%Determine intersection between each slide and the cliff profile
-		for 42 j=roturanotch,2,-1
-		    %Determine directorï¿½s vector for each point
+		!Determine intersection between each slide and the cliff profile
+		do 42 j=roturanotch,2,-1
+		    !Determine director´s vector for each point
 		    u1 = PzyRglobal(2,j-1) - PzyRglobal(2,j)
 			u2 = PzyRglobal(1,j-1) - PzyRglobal(1,j)
-		    %Determine cliff slope
-			if (u1 == 0.0) 
+		    !Determine cliff slope
+			if (u1.EQ.0.0) then
 			    indvertcliff = 1
 		        mcliff = 0.0
             else
 			    indvertcliff = 0
 				mcliff = u2/u1
 			end if
-			%Determine cross point between medium slide point and cliff
+			!Determine cross point between medium slide point and cliff
 			XPtomedio = Xmedio
 			YPtomedio = mcliff*XPtomedio + PzyRglobal(1,j) - mcliff*PzyRglobal(2,j)
-			%Lambda parameter that determine intersection point within the cliff
-			if (indvertcliff == 0.0) 
+			!Lambda parameter that determine intersection point within the cliff
+			if (indvertcliff.EQ.0.0) then
 			    lambda = (XPtomedio - PzyRglobal(2,j))/u1
 			else
 			    lambda = (YPtomedio - PzyRglobal(1,j))/u2
 			end if
-			%Coordenate of cross point if it exists
-			if ((lambda >= 0.0) && (lambda <= 1.0)) 
+			!Coordenate of cross point if it exists
+			if ((lambda.GE.0.0).AND.(lambda.LE.1.0)) then
 			    go to 43
 			else
 			    go to 42
@@ -1422,40 +1422,40 @@ Tglob = 1
 		42 continue
 		43 continue
         		    
-		%Slide height
+		!Slide height
 		Hslide = dabs(YPtomedio - Ymedio)
         		    
-		%Groundwater definition -> Hw
-		if (groundwater == 1) 
-		    if (Xmedio >= PzyRglobal(2,seepagelevel)) 
+		!Groundwater definition -> Hw
+		if (groundwater.EQ.1) then
+		    if (Xmedio.GE.PzyRglobal(2,seepagelevel)) then
 		        Hw = hslide
 		        go to 44
-		    elseif (Xmedio < PzyRglobal(2,seepagelevel)) 
+		    else if (Xmedio.LT.PzyRglobal(2,seepagelevel)) then
 		        Profseepage = dabs(PzyRglobal(1,seepagelevel)-PzyRglobal(1,1))
 		        Longitud = dabs(PzyRglobal(2,seepagelevel)-PzyRglobal(2,1))
 		        distY = dabs(PzyRglobal(2,seepagelevel)-Xmedio)
 		        curvah = dsqrt((distY/longitud)*(Profseepage-Profagua)**2)
 		        Hw = dabs(curvah+PzyRglobal(1,seepagelevel))-Ymedio
-		        if (Hw <= 0) 
-		            Hw = 0
+		        if (Hw.LE.0.d0) then
+		            Hw = 0.d0
 		        end if 
 		        go to 44
 		    end if
-		elseif (groundwater == 0) 
-		    Hw = 0
+		else if (groundwater.EQ.0) then
+		    Hw = 0.d0
 		    go to 44
-		elseif (groundwater == 2) 
+		else if (groundwater.EQ.2) then
 		    Hw = Hslide
 		    go to 44
 		end if
         44 continue 
         		    
-		%Geological layer at the bottom
+		!Geological layer at the bottom
 		tp = 1
 		potacumulada = potestrato (tp)
         45 continue
-		if (((PzyRglobal(1,1)-potacumulada) <= Ymedio) && (Ymedio <= PzyRglobal(1,1)-(potacumulada-potestrato(tp)))) 
-		    %Units in KPa = KN/m**2
+		if (((PzyRglobal(1,1)-potacumulada).LE.Ymedio).and.(Ymedio.LE.PzyRglobal(1,1)-(potacumulada-potestrato(tp)))) then
+		    !Units in KPa = KN/m**2
 			Ecohesionrot = Ecohesion(tp)
 			Ephirot = Ephi(tp)
 			Pesounitrot = Pesounit(tp)
@@ -1467,59 +1467,59 @@ Tglob = 1
 		end if
 		46 continue
         			
-	    %Determine the Numerator
+	    !Determine the Numerator
 		Num = Num + Ecohesionrot*(anchoslide/dcos(gamma*pi/180)) + (Hslide*Pesounitrot*anchoslide*dcos(gamma*pi/180) - Hw*freshwater*anchoslide/dcos(gamma*pi/180))*dtan(Ephirot*pi/180)
 			        
-   		%Determine the Denominator
+   		!Determine the Denominator
 		Deno = Deno + Hslide*Pesounitrot*anchoslide*dsin((gamma*pi/180))
     end do
                 
-    %Determine the global SAFETY FACTOR (FS) for each circular failure
-    %If the value is < 1 -> FAILURE OCCURS
+    !Determine the global SAFETY FACTOR (FS) for each circular failure
+    !If the value is < 1 -> FAILURE OCCURS
     FS = Num/Deno
                 
-    %Calculated circular failure is stable or instable?
-    if (FS >= 1) 
-        retroceso = retroceso + 0.5
+    !Calculated circular failure is stable or instable?
+    if (FS.GE.1.d0) then
+        retroceso = retroceso + 0.5d0
         go to 1
-    elseif (FS < 1) 
-        retroceso = retroceso + 0.5
-        %Save the possitions vector previous failure in Failure Matrix in case its the first failure of the simulation steep
-        if (Parametrorotura == 0) 
+    else if (FS.LT.1.d0) then
+        retroceso = retroceso + 0.5d0
+        !Save the possitions vector previous failure in Failure Matrix in case its the first failure of the simulation steep
+        if (Parametrorotura.EQ.0) then
             dimmatrizrotura = size(Matrizrotura,dim=2)
 			allocate (dummy(NPrefino+1,dimmatrizrotura))
-			for j=1,dimmatrizrotura
-			    for i=1,NPrefino+1
+			do j=1,dimmatrizrotura
+			    do i=1,NPrefino+1
 				    dummy(i,j) = Matrizrotura (i,j)
 				end do
 			end do
 		    
 		    deallocate (Matrizrotura)
 			allocate (Matrizrotura(NPrefino+1,dimmatrizrotura+1))
-		    for j=1,dimmatrizrotura
-			    for i=1,NPrefino+1
+		    do j=1,dimmatrizrotura
+			    do i=1,NPrefino+1
 				    Matrizrotura(i,j) = dummy (i,j)
-				end for 
+				end do 
 			end do
 
 		    deallocate (dummy)
-            %Determine failue time and matrix possition
-			Matrizrotura(1,dimmatrizrotura+1) = Tglob %Output time in months
-		    %Failure matrix
-			for i=1,NPrefino
+            !Determine failue time and matrix possition
+			Matrizrotura(1,dimmatrizrotura+1) = Tglob !Output time in months
+		    !Failure matrix
+			do i=1,NPrefino
 			    Matrizrotura(i+1,dimmatrizrotura+1) = PzyRglobal(2,i)
 			end do
         end if
                 
-        %Circular failure from roturanotch to PtocorteCirc2
-        for i=roturanotch-1,PtocorteCirc2,-1
-            aux = 0
+        !Circular failure from roturanotch to PtocorteCirc2
+        do i=roturanotch-1,PtocorteCirc2,-1
+            aux = 0.d0
             aux = (2*CXc - dsqrt(4*CXc**2 + 4*(radio**2 - CXc**2 - CYc**2 + 2*CYc*PzyRglobal(1,i) - (PzyRglobal(1,i))**2)))/2.
-            if (aux <= PzyRglobal(2,i)) 
+            if (aux.LE.PzyRglobal(2,i)) then
                 PzyRglobal(2,i) = aux
                 go to 47
-            elseif (aux > PzyRglobal(2,i))
-                aux = 0
+            else if (aux.GT.PzyRglobal(2,i))then
+                aux = 0.d0
                 aux = (2*CXc + dsqrt(4*CXc**2 + 4*(radio**2 - CXc**2 - CYc**2 + 2*CYc*PzyRglobal(1,i) - (PzyRglobal(1,i))**2)))/2.
                 PzyRglobal(2,i) = aux
             end if
@@ -1527,59 +1527,59 @@ Tglob = 1
         end do
                     
         Vertcirc = 0
-        %Fix geometry in case circular failure and cliff have strange geometry
-        for i=roturanotch-1,2,-1
-            if (PzyRglobal(2,i-1) <= PzyRglobal(2,i)) 
-                if (Vertcirc == 1) 
-                    %go to 48
+        !Fix geometry in case circular failure and cliff have strange geometry
+        do i=roturanotch-1,2,-1
+            if (PzyRglobal(2,i-1).LE.PzyRglobal(2,i)) then
+                if (Vertcirc.EQ.1) then
+                    !go to 48
                 end if
-                %If material is created we avoid this circular failure
-                if (PzyRglobal(2,i) > Matrizrotura(i+1,dimmatrizrotura+1)) 
+                !If material is created we avoid this circular failure
+                if (PzyRglobal(2,i).GT.Matrizrotura(i+1,dimmatrizrotura+1)) then
                     Parametrorotura = 0
-                    for j=1,NPrefino
+                    do j=1,NPrefino
 				        PzyRglobal (2,j) = Matrizrotura(j+1,dimmatrizrotura+1)
 				    end do
                                     
                     allocate (dummy(NPrefino+1,dimmatrizrotura))
-				    for k=1,dimmatrizrotura
-				        for j=1,NPrefino+1
+				    do k=1,dimmatrizrotura
+				        do j=1,NPrefino+1
 					        dummy(j,k) = Matrizrotura (j,k)
 					    end do
 				    end do
 				    deallocate (Matrizrotura)
 		            allocate (Matrizrotura(NPrefino+1,dimmatrizrotura))
 
-				    for k=1,dimmatrizrotura
-				        for j=1,NPrefino+1
+				    do k=1,dimmatrizrotura
+				        do j=1,NPrefino+1
 					        Matrizrotura(j,k) = dummy (j,k)
-					    end for 
+					    end do 
 			        end do
 				    deallocate (dummy)
                     go to 1
                 end if
                 go to 49
-            elseif (PzyRglobal(2,i-1) > PzyRglobal(2,i))
+            else if (PzyRglobal(2,i-1).GT.PzyRglobal(2,i))then
                 PzyRglobal(2,i-1) = PzyRglobal(2,i)
                 Vertcirc = 1
-                %If material is created we avoid this circular failure
-                if (PzyRglobal(2,i) > Matrizrotura(i+1,dimmatrizrotura+1)) 
+                !If material is created we avoid this circular failure
+                if (PzyRglobal(2,i).GT.Matrizrotura(i+1,dimmatrizrotura+1)) then
                     Parametrorotura = 0
-                    for j=1,NPrefino
+                    do j=1,NPrefino
 				        PzyRglobal (2,j) = Matrizrotura(j+1,dimmatrizrotura+1)
-				    end for                
+				    end do                
                     allocate (dummy(NPrefino+1,dimmatrizrotura))
-				    for k=1,dimmatrizrotura
-				        for j=1,NPrefino+1
+				    do k=1,dimmatrizrotura
+				        do j=1,NPrefino+1
 					        dummy(j,k) = Matrizrotura (j,k)
 					    end do
 		            end do
 
 				    deallocate (Matrizrotura)
 				    allocate (Matrizrotura(NPrefino+1,dimmatrizrotura))
-                    for k=1,dimmatrizrotura
-                        for j=1,NPrefino+1
+                    do k=1,dimmatrizrotura
+                        do j=1,NPrefino+1
                             Matrizrotura(j,k) = dummy (j,k)
-                        end for 
+                        end do 
 		            end do
                     deallocate (dummy)
                     go to 1
@@ -1590,94 +1590,94 @@ Tglob = 1
         end do
         48 continue
         
-        %Save the possitions vector after failure in FAILURE MATRIX          
+        !Save the possitions vector after failure in FAILURE MATRIX          
         Parametrorotura = 1
         dimmatrizrotura = size(Matrizrotura,dim=2)
 	    allocate (dummy(NPrefino+1,dimmatrizrotura))
-		for k=1,dimmatrizrotura
-		    for i=1,NPrefino+1
+		do k=1,dimmatrizrotura
+		    do i=1,NPrefino+1
 			    dummy(i,k) = Matrizrotura (i,k)
 			end do
 		end do
 		deallocate (Matrizrotura)
 		allocate (Matrizrotura(NPrefino+1,dimmatrizrotura+1))
-		for k=1,dimmatrizrotura
-		    for i=1,NPrefino+1
+		do k=1,dimmatrizrotura
+		    do i=1,NPrefino+1
 			    Matrizrotura(i,k) = dummy (i,k)
-			end for 
+			end do 
 		end do
 		deallocate (dummy)
-        %Failure time
-		Matrizrotura(1,dimmatrizrotura+1) = Tglob %Output time in months
-		%Failure matrix
-		for i=1,NPrefino
+        !Failure time
+		Matrizrotura(1,dimmatrizrotura+1) = Tglob !Output time in months
+		!Failure matrix
+		do i=1,NPrefino
 		    Matrizrotura(i+1,dimmatrizrotura+1) = PzyRglobal(2,i)
 		end do
             		
-		%RECESSION MATRIX
+		!RECESSION MATRIX
 		dimmatrizrecesion = size(Matrizrecesion,dim=2)
 		allocate (dummy1(NPrefino+2,dimmatrizrecesion))
-        for k=1,dimmatrizrecesion
-		    for i=1,NPrefino+2
+        do k=1,dimmatrizrecesion
+		    do i=1,NPrefino+2
 		        dummy1(i,k) = Matrizrecesion (i,k)
 		    end do
 	    end do
 		deallocate (Matrizrecesion)
 		allocate (Matrizrecesion(NPrefino+2,dimmatrizrecesion+1))
-		for k=1,dimmatrizrecesion
-		    for i=1,NPrefino+2
+		do k=1,dimmatrizrecesion
+		    do i=1,NPrefino+2
 			    Matrizrecesion(i,k) = dummy1 (i,k)
 	        end do
 	    end do
 		deallocate (dummy1)
-        %Failure time
-	    Matrizrecesion(1,dimmatrizrecesion+1) = Tglob %Output time in months
-	    %Recession matrix
-	    for i= 2,NPrefino+1
+        !Failure time
+	    Matrizrecesion(1,dimmatrizrecesion+1) = Tglob !Output time in months
+	    !Recession matrix
+	    do i= 2,NPrefino+1
 	        Matrizrecesion(i+1,dimmatrizrecesion+1) = Matrizrotura(i,dimmatrizrotura+1) - Matrizrotura(i,dimmatrizrotura)
         end do
-        sumaincrementoy = 0
-		for i=1,NPrefino
+        sumaincrementoy = 0.d0
+		do i=1,NPrefino
 		    sumaincrementoy = sumaincrementoy + abs(Matrizrecesion(i+2,dimmatrizrecesion+1))
 		end do
 		Matrizrecesion(2,dimmatrizrecesion+1) = sumaincrementoy*Dz
 		Volacumulado1 = Volacumulado1 + sumaincrementoy*Dz
         write(2,11) Tglob,sumaincrementoy*Dz,Volacumulado1,(abs(Matrizrecesion(label(ilabel)+2,dimmatrizrecesion+1)),ilabel=1,nlabel)
                 
-        %GROUNDWATER LEVELS MATRIX
-        if (groundwater == 0) 
+        !GROUNDWATER LEVELS MATRIX
+        if (groundwater.EQ.0) then
             go to 65
-        elseif (groundwater == 1) 
+        else if (groundwater.EQ.1) then
             Profseepage = dabs(PzyRglobal(1,seepagelevel)-PzyRglobal(1,1))
             Longitud = dabs(PzyRglobal(2,seepagelevel)-PzyRglobal(2,1))
 	        dist = longitud/1000.
-	        for i=1,1000
+	        do i=1,1000
 	            distancia(i) = PzyRglobal(2,seepagelevel) - (i-1)*dist
 	        end do
-	        for i=1,1000
+	        do i=1,1000
                 Hwdraw(i) = dsqrt((dabs(distancia(i)-PzyRglobal(2,seepagelevel))/longitud)*(Profseepage-Profagua)**2) + PzyRglobal(1,seepagelevel)
 	        end do
-	        %Groundwater levels to print it
+	        !Groundwater levels to print it
 	        dimmatrizHwdraw = size(MatrizHwdraw,dim=2)
 	        allocate (dummy2(1000+1,dimmatrizHwdraw))
-		    for j=1,dimmatrizHwdraw
-                for i=1,1000+1
+		    do j=1,dimmatrizHwdraw
+                do i=1,1000+1
 	            dummy2(i,j) = MatrizHwdraw (i,j)
     		    end do
 		    end do
 		    deallocate (MatrizHwdraw)
 		    allocate (MatrizHwdraw(1000+1,dimmatrizHwdraw+2))
-		    for j=1,dimmatrizHwdraw
-		        for i=1,1000+1
+		    do j=1,dimmatrizHwdraw
+		        do i=1,1000+1
 			        MatrizHwdraw(i,j) = dummy2 (i,j)
-	            end for 
+	            end do 
 	        end do
 		    deallocate (dummy2)
-            %Failure time
-	        MatrizHwdraw(1,dimmatrizHwdraw+1) = Tglob %Output time in months
-		    MatrizHwdraw(1,dimmatrizHwdraw+2) = Tglob %Output time in months
-		    %Groundwater print matrix -> Hw
-		    for i=1,1000
+            !Failure time
+	        MatrizHwdraw(1,dimmatrizHwdraw+1) = Tglob !Output time in months
+		    MatrizHwdraw(1,dimmatrizHwdraw+2) = Tglob !Output time in months
+		    !Groundwater print matrix -> Hw
+		    do i=1,1000
 		        MatrizHwdraw(i+1,dimmatrizHwdraw+1) = Hwdraw(i)
 	            MatrizHwdraw(i+1,dimmatrizHwdraw+2) = distancia(i)
             end do
@@ -1687,46 +1687,46 @@ Tglob = 1
     go to 1
     41 continue
     
-    if (Parametrorotura == 1)  %Landslide occurs -> NO toppling
-        Volacumulado2 = 0
-        %Total DEBRIS volume
-        Volacumulafor = Volacumulado1
+    if (Parametrorotura.EQ.1) then !Landslide occurs -> NO toppling
+        Volacumulado2 = 0.d0
+        !Total DEBRIS volume
+        Volacumulado = Volacumulado1
         go to 54
-    elseif (Parametrorotura == 0) 
-        Volacumulado1 = 0
-        %TOPPLING FAILURE EVALUATION
-        minestabilidad = 0
+    else if (Parametrorotura.EQ.0) then
+        Volacumulado1 = 0.d0
+        !TOPPLING FAILURE EVALUATION
+        minestabilidad = 0.d0
         Ptocorte = 0
-        for 50 j=roturanotch-1,2,-1
-            %Determine directorï¿½s vector for each cliff point
+        do 50 j=roturanotch-1,2,-1
+            !Determine director´s vector for each cliff point
 		    u1 = PzyRglobal(2,j-1) - PzyRglobal(2,j)
 		    u2 = PzyRglobal(1,j-1) - PzyRglobal(1,j)
-		    %Determine cliff slope
-		    if (u1 == 0.0) 
+		    !Determine cliff slope
+		    if (u1.EQ.0.0) then
 	            indvertcliff = 1
 			    mcliff = 0.0
 	        else
 	            indvertcliff = 0
 			    mcliff = u2/u1
 	        end if
-	        %Determine cross points between vertical failure and cliff
-		    if (mcliff == minestabilidad) 
+	        !Determine cross points between vertical failure and cliff
+		    if (mcliff.EQ.minestabilidad) then
 		        go to 50
 	        else
 	   	        Yc = PzyRglobal(2,roturanotch)
 	    	    Zc = mcliff*Yc + PzyRglobal(1,j) - mcliff*PzyRglobal(2,j)
 	        end if
-	        %Lambda parameter that determine intersection point within the cliff
-		    if (indvertcliff == 0.0) 
+	        !Lambda parameter that determine intersection point within the cliff
+		    if (indvertcliff.EQ.0.0) then
                 lambda = (Yc - PzyRglobal(2,j))/u1
 	        else
 	            lambda = (Zc - PzyRglobal(1,j))/u2
 	        end if
-		    %Coordenate of cross point if it exists
-	        if ((lambda >= 0.0) && (lambda < 1.0)) 
+		    !Coordenate of cross point if it exists
+	        if ((lambda.GE.0.0).AND.(lambda.LT.1.0)) then
 	            Ptocorte = j
 	            go to 51
-	        elseif (lambda == 1.0) 
+	        else if (lambda.EQ.1.0) then
 			    Ptocorte = j-1
 			    go to 51
 	        else
@@ -1734,33 +1734,33 @@ Tglob = 1
 	        end if
         50 continue
 	    51 continue	    
-        %If cutoff doesnï¿½t exist -> no notch => next erosive event
-        if (Ptocorte == 0) 
+        !If cutoff doesn´t exist -> no notch => next erosive event
+        if (Ptocorte.EQ.0) then
 	        go to 54
         end if
-        %Vertical vector equal to cliff
+        !Vertical vector equal to cliff
         allocate (vectorverticalrot(NPrefino))
-	    for i=1,NPrefino
+	    do i=1,NPrefino
 	        vectorverticalrot(i) = PzyRglobal(2,i)
         end do
-        %Vetical plane of failure
+        !Vetical plane of failure
         nrot = 0
-        CoordX = 0
-        for i = roturanotch,ptocorte,-1
+        CoordX = 0.d0
+        do i = roturanotch,ptocorte,-1
 	        vectorverticalrot(i) = PzyRglobal (2,roturanotch)
 		    nrot = nrot + 1
 		    CoordX = CoordX + dabs(PzyRglobal(2,i))
         end do		    
         CoordX = CoordX/nrot
-	    %Localization of the point roturanotch in its geological layer
+	    !Localization of the point roturanotch in its geological layer
         k=1
 	    potacumulada = potestrato(k)
-	    Sigmatensilerock = 0
-	    Pesounitrot = 0
+	    Sigmatensilerock = 0.d0
+	    Pesounitrot = 0.d0
         52 continue
-        if ((PzyRglobal(1,1)-potacumulada) <= PzyRglobal(1,roturanotch)) 
-	        %Units in KPa = KN/m**2
-            %%%%Sigmatensilerock = Ecohesion(k)*0.1
+        if ((PzyRglobal(1,1)-potacumulada).LE.PzyRglobal(1,roturanotch)) then
+	        !Units in KPa = KN/m**2
+            !!!!Sigmatensilerock = Ecohesion(k)*0.1d0
 		    Sigmatensilerock = Shearstrength(k)
 	        Pesounitrot = Pesounit(k)
 		    go to 53		            
@@ -1771,224 +1771,224 @@ Tglob = 1
 	    end if
 	    53 continue
     			
-	    %Volume of the possible unstable wedge
-        sumaacumuladarot = 0
-	    aux = 0
-	    for i = roturanotch,ptocorte,-1
+	    !Volume of the possible unstable wedge
+        sumaacumuladarot = 0.d0
+	    aux = 0.d0
+	    do i = roturanotch,ptocorte,-1
 	        aux = abs(vectorverticalrot(i)-PzyRglobal(2,i))
 	        sumaacumuladarot = sumaacumuladarot + aux
 	    end do
-	    %Units in KN/m**2
+	    !Units in KN/m**2
 	    Volacumulado2 = sumaacumuladarot*dz
 	    sumaacumuladarot = Volacumulado2*pesounitrot
 	    hrot = dabs(PzyRglobal(1,roturanotch)-PzyRglobal(1,ptocorte))
 	    Lcdg = dabs(PzyRglobal(2,roturanotch)) - CoordX
 	    Sigmatensilemax = (6.*sumaacumuladarot*Lcdg)/(hrot**2)
     			
-	    %SAFETY FACTOR VS. TOPPLING FAILURE
-	    if (Sigmatensilemax >= Sigmatensilerock) 
-		    for i = Ptocorte,roturanotch
+	    !SAFETY FACTOR VS. TOPPLING FAILURE
+	    if (Sigmatensilemax.GE.Sigmatensilerock) then
+		    do i = Ptocorte,roturanotch
 		        PzyRglobal(2,i) = vectorverticalrot(i)
 	        end do
-	        %Total DEBRIS volume
-	        Volacumulafor = Volacumulado2
+	        !Total DEBRIS volume
+	        Volacumulado = Volacumulado2
 	        deallocate (vectorverticalrot)
 	        go to 54
-	    elseif (Sigmatensilemax < Sigmatensilerock) 
-	        %No DEBRIS
-	        Volacumulafor = 0
+	    else if (Sigmatensilemax.LT.Sigmatensilerock) then
+	        !No DEBRIS
+	        Volacumulado = 0.d0
 	        deallocate (vectorverticalrot)
 	        go to 54
 	    end if
 	end if
-    54 continue %It comes from the absence of notch -> ptocorte = 0
+    54 continue !It comes from the absence of notch -> ptocorte = 0
 
 
-    %RESULTS MATRIX from third collum (t=1) until the end (t=j*tdatos)
-    if ((Tglob == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	    %Time vectors to introduce in the matrix
-		DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-    	%Transfer the position information matrix into DRAWING MATRIX
-		for i=1,NPrefino
+    !RESULTS MATRIX from third collum (t=1) until the end (t=j*tdatos)
+    if ((Tglob.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	    !Time vectors to introduce in the matrix
+		DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+    	!Transfer the position information matrix into DRAWING MATRIX
+		do i=1,NPrefino
     	    DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	    end do
    		jdibujo = jdibujo + 1
     end if
     
-    %DETERMINE TIME WITHOUT EROSION DUE TO DEBRIS MATERIALS
-    if (Volacumulado == 0) 
+    !DETERMINE TIME WITHOUT EROSION DUE TO DEBRIS MATERIALS
+    if (Volacumulado.EQ.0.d0) then
         Pmonth = 0
-        Dprot = 0
-        Drem = 0
+        Dprot = 0.d0
+        Drem = 0.d0
         go to 55
     end if
-    Drem = Volacumulado/Mf %Result in days
-    Pmonth = fix(Drem/30.) %If the value is greater than 1, Pmonth is the time simulation jump (months)
-    Dprot = dabs(Pmonth*30-Drem) %The value that modifies in No the number of days
+    Drem = Volacumulado/Mf !Result in days
+    Pmonth = int(Drem/30.) !If the value is greater than 1, Pmonth is the time simulation jump (months)
+    Dprot = dabs(Pmonth*30-Drem) !The value that modifies in No the number of days
     55 continue
     
-    %DETERMINE YEAR SEASON TO INTRODUCE THE WAVE VALUES
-    if (Pmonth == 0) 
-        %YEARS WITHOUT CHANGE IN SEA LEVEL until equilibrium conditions are reached
-%        if (Tglob >= (12*5))  %5 years without lakelevel change
-%            changelakelevel = 1
-%        end if
+    !DETERMINE YEAR SEASON TO INTRODUCE THE WAVE VALUES
+    if (Pmonth.EQ.0) then
+        !YEARS WITHOUT CHANGE IN SEA LEVEL until equilibrium conditions are reached
+!        if (Tglob.GE.(12*5)) then !5 years without lakelevel change
+!            changelakelevel = 1
+!        end if
         
-        if (changelakelevel == 1) 
-            %15 years cicle to change the lake level
-            if (Tglob == ((5*12)+9+ciclo)) 
-                %1st change
-                controllevel = controllevel-1 %TL rise in 0.1
+        if (changelakelevel.EQ.1) then
+            !15 years cicle to change the lake level
+            if (Tglob.EQ.((5*12)+9+ciclo)) then
+                !1st change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+18+ciclo)) 
-                %2nd change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+18+ciclo)) then
+                !2nd change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+27+ciclo)) 
-                %3rd change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+27+ciclo)) then
+                !3rd change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+36+ciclo)) 
-                %4th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+36+ciclo)) then
+                !4th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+45+ciclo)) 
-                %5th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+45+ciclo)) then
+                !5th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+54+ciclo)) 
-                %6th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+54+ciclo)) then
+                !6th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+63+ciclo)) 
-                %7th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+63+ciclo)) then
+                !7th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+72+ciclo)) 
-                %8th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+72+ciclo)) then
+                !8th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+81+ciclo)) 
-                %9th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+81+ciclo)) then
+                !9th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+90+ciclo))  %Half of the cicle 7.5 years
-                %10th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+90+ciclo)) then !Half of the cicle 7.5 years
+                !10th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+99+ciclo)) 
-                %11th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+99+ciclo)) then
+                !11th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+108+ciclo)) 
-                %12th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+108+ciclo)) then
+                !12th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+117+ciclo)) 
-                %13th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+117+ciclo)) then
+                !13th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+126+ciclo)) 
-                %14 change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+126+ciclo)) then
+                !14 change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+135+ciclo)) 
-                %15th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if (Tglob.EQ.((5*12)+135+ciclo)) then
+                !15th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+144+ciclo)) 
-                %16th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+144+ciclo)) then
+                !16th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+153+ciclo)) 
-                %17th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+153+ciclo)) then
+                !17th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+162+ciclo)) 
-                %18th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+162+ciclo)) then
+                !18th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+171+ciclo)) 
-                %19th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if (Tglob.EQ.((5*12)+171+ciclo)) then
+                !19th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 56
-            elseif (Tglob == ((5*12)+180+ciclo))  %Cicleï¿½s end 15 years
-                %20th change
-                controllevel = controllevel-1 %TL rise in 0.1
-                ciclo = ciclo + 180 %180 = 15(years)*12(months)
+            else if (Tglob.EQ.((5*12)+180+ciclo)) then !Cicle´s end 15 years
+                !20th change
+                controllevel = controllevel-1 !TL rise in 0.1
+                ciclo = ciclo + 180 !180 = 15(years)*12(months)
                 go to 56
             end if
         end if
         56 continue
         
-        if (Tglob == 3*salto) 
-            %SUMMER waves conditions
-            Waves = 4 %Number of waves in the season SUMMER
-            %Creation of H vector -> Deep water wave height
+        if (Tglob.EQ.3*salto) then
+            !SUMMER waves conditions
+            Waves = 4 !Number of waves in the season SUMMER
+            !Creation of H vector -> Deep water wave height
             deallocate (H)
             allocate (H(Waves))
-            %Creation of T vector -> Wave period
+            !Creation of T vector -> Wave period
             deallocate (T)
             allocate (T(Waves))
-            %Creation of L vector -> Deep water wave length
+            !Creation of L vector -> Deep water wave length
             deallocate (L)
             allocate (L(Waves))
-            %Creation of WF vector -> Percentage frecuency of each type of wave per day
+            !Creation of WF vector -> Percentage frecuency of each type of wave per day
             deallocate (WF)
             allocate (WF(Waves))
-            %Creation of Wn vector -> The number of waves each hour
+            !Creation of Wn vector -> The number of waves each hour
             deallocate (Wn)
             allocate (Wn(Waves))
             
-            %Introduction of the Deep water wave height values
+            !Introduction of the Deep water wave height values
             H(1) = 0.5
             H(2) = 1
             H(3) = 2
             H(4) = 3
-            %Introduction of the Wave period values
+            !Introduction of the Wave period values
             T(1) = 2.
             T(2) = 3.5
             T(3) = 4.5
             T(4) = 6.5
-            %Calculation of the Deep water wave length values
-            for i=1,Waves
-                L(i) = 1.56*(T(i)**2) %Units: [m] - CERC (2002)
+            !Calculation of the Deep water wave length values
+            do i=1,Waves
+                L(i) = 1.56*(T(i)**2) !Units: [m] - CERC (2002)
             end do
-            %Introduction of the Percentage frecuency of each type of wave 
+            !Introduction of the Percentage frecuency of each type of wave 
             WF(1) = 31.27
             WF(2) = 41.73
             WF(3) = 1.9
             WF(4) = 0.33
-            %Total frecuency = 75.23 %
-            %Calculation of the The number of waves each hour 
-            for i=1,Waves
-                Wn(i) = (60*60)/T(i) %60 s/min * 60 min/hours
+            !Total frecuency = 75.23 %
+            !Calculation of the The number of waves each hour 
+            do i=1,Waves
+                Wn(i) = (60*60)/T(i) !60 s/min * 60 min/hours
             end do
             
-            %SUMMER lake level
-            %TL = controllevel - fix(0.3/Dz) %Increse 0.3m from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+            !SUMMER lake level
+            !TL = controllevel - int(0.3/Dz) !Increse 0.3m from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
 
-            go to 1001 %Loops end before -> invierno =0
-        elseif (Tglob == 3*(salto+1)) 
-            %FALL waves conditions
-            Waves = 7 %Number of waves in the season FALL
-            %Creation of H vector -> Deep water wave height
+            go to 1001 !Loops end before -> invierno =0
+        else if (Tglob.EQ.3*(salto+1)) then
+            !FALL waves conditions
+            Waves = 7 !Number of waves in the season FALL
+            !Creation of H vector -> Deep water wave height
             deallocate (H)
             allocate (H(Waves))
-            %Creation of T vector -> Wave period
+            !Creation of T vector -> Wave period
             deallocate (T)
             allocate (T(Waves))
-            %Creation of L vector -> Deep water wave length
+            !Creation of L vector -> Deep water wave length
             deallocate (L)
             allocate (L(Waves))
-            %Creation of WF vector -> Percentage frecuency of each type of wave per day
+            !Creation of WF vector -> Percentage frecuency of each type of wave per day
             deallocate (WF)
             allocate (WF(Waves))
-            %Creation of Wn vector -> The number of waves each hour
+            !Creation of Wn vector -> The number of waves each hour
             deallocate (Wn)
             allocate (Wn(Waves))
             
-            %Introduction of the Deep water wave height values
+            !Introduction of the Deep water wave height values
             H(1) = 0.5
             H(2) = 1
             H(3) = 2
@@ -1996,7 +1996,7 @@ Tglob = 1
             H(5) = 4
             H(6) = 5
             H(7) = 6
-            %Introduction of the Wave period values
+            !Introduction of the Wave period values
             T(1) = 2.
             T(2) = 3.8
             T(3) = 4.5
@@ -2004,11 +2004,11 @@ Tglob = 1
             T(5) = 6.5
             T(6) = 7.
             T(7) = 7.5
-            %Calculation of the Deep water wave length values
-            for i=1,Waves
-                L(i) = 1.56*(T(i)**2) %Units: [m] - CERC (2002)
+            !Calculation of the Deep water wave length values
+            do i=1,Waves
+                L(i) = 1.56*(T(i)**2) !Units: [m] - CERC (2002)
             end do
-            %Introduction of the Percentage frecuency of each type of wave 
+            !Introduction of the Percentage frecuency of each type of wave 
             WF(1) = 8.87
             WF(2) = 36.27
             WF(3) = 16.57
@@ -2016,176 +2016,176 @@ Tglob = 1
             WF(5) = 1.5
             WF(6) = 0.2
             WF(7) = 0.1
-            %Total frecuency = 72.9 %
-            %Calculation of the The number of waves each hour 
-            for i=1,Waves
-                Wn(i) = (60*60)/T(i) %60 s/min * 60 min/hours
+            !Total frecuency = 72.9 %
+            !Calculation of the The number of waves each hour 
+            do i=1,Waves
+                Wn(i) = (60*60)/T(i) !60 s/min * 60 min/hours
             end do
 
-            %FALL lake level
-            %TL = controllevel %Equal level from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+            !FALL lake level
+            !TL = controllevel !Equal level from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
             
-            go to 1001 %Loops end before -> invierno =0
-        elseif (Tglob == 3*(salto+2)) 
-            invierno = 1 %Winter conditions
-            counter = counter + 3 %Winter conditions
-            %WINTER waves conditions
+            go to 1001 !Loops end before -> invierno =0
+        else if (Tglob.EQ.3*(salto+2)) then
+            invierno = 1 !Winter conditions
+            counter = counter + 3 !Winter conditions
+            !WINTER waves conditions
             Waves = 1
-            %Creation of H vector -> Deep water wave height
+            !Creation of H vector -> Deep water wave height
             deallocate (H)
             allocate (H(Waves))
-            %Creation of T vector -> Wave period
+            !Creation of T vector -> Wave period
             deallocate (T)
             allocate (T(Waves))
-            %Creation of L vector -> Deep water wave length
+            !Creation of L vector -> Deep water wave length
             deallocate (L)
             allocate (L(Waves))
-            %Creation of WF vector -> Percentage frecuency of each type of wave per day
+            !Creation of WF vector -> Percentage frecuency of each type of wave per day
             deallocate (WF)
             allocate (WF(Waves))
-            %Creation of Wn vector -> The number of waves each hour
+            !Creation of Wn vector -> The number of waves each hour
             deallocate (Wn)
             allocate (Wn(Waves))
             
-            %Introduction of the Deep water wave height values
-            H(1) = 0
-            %Introduction of the Wave period values
-            T(1) = 0
-            %Calculation of the Deep water wave length values
-            L(1) = 1.56*(T(1)**2) %Units: [m] - CERC (2002)
-            %Introduction of the Percentage frecuency of each type of wave 
-            WF(1) = 0
-            %Calculation of the The number of waves each hour 
-            Wn(1) = (60*60)/T(1) %60 s/min * 60 min/hours
+            !Introduction of the Deep water wave height values
+            H(1) = 0.d0
+            !Introduction of the Wave period values
+            T(1) = 0.d0
+            !Calculation of the Deep water wave length values
+            L(1) = 1.56*(T(1)**2) !Units: [m] - CERC (2002)
+            !Introduction of the Percentage frecuency of each type of wave 
+            WF(1) = 0.d0
+            !Calculation of the The number of waves each hour 
+            Wn(1) = (60*60)/T(1) !60 s/min * 60 min/hours
             
-            %WINTER lake level
-            %TL = controllevel %No variation from FALL -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+            !WINTER lake level
+            !TL = controllevel !No variation from FALL -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
             
-            go to 1002 %Loop end after re-inizialization of variables
+            go to 1002 !Loop end after re-inizialization of variables
         end if
         
-    elseif (Pmonth.NE.0) 
+    else if (Pmonth.NE.0) then
     
         Draw = Tglob
-        Tglob = Tglob + Pmonth %Simulation jump due to debris toe protection
-        %YEARS WITHOUT CHANGE IN SEA LEVEL until equilibrium conditions are reached
-%        if (Tglob >= (12*5))  %5 years without lakelevel change
-%            changelakelevel = 1
-%        end if
-        if (Tglob > Draw+12) 
-            yearjump = fix((Tglob-Draw)/12)
-            salto = salto + 4*yearjump %Winter conditions
+        Tglob = Tglob + Pmonth !Simulation jump due to debris toe protection
+        !YEARS WITHOUT CHANGE IN SEA LEVEL until equilibrium conditions are reached
+!        if (Tglob.GE.(12*5)) then !5 years without lakelevel change
+!            changelakelevel = 1
+!        end if
+        if (Tglob.GT.Draw+12) then
+            yearjump = int((Tglob-Draw)/12)
+            salto = salto + 4*yearjump !Winter conditions
         end if
         
-        if (changelakelevel == 1) 
-            %15 years cicle to change the lake level 
-            if ((Draw <= ((5*12)+9+ciclo)) && (((5*12)+9+ciclo) <= Tglob)) 
-                %1st change
-                controllevel = controllevel-1 %TL rise in 0.1
+        if (changelakelevel.EQ.1) then
+            !15 years cicle to change the lake level 
+            if ((Draw.LE.((5*12)+9+ciclo)).and.(((5*12)+9+ciclo).LE.Tglob)) then
+                !1st change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+18+ciclo)) && (((5*12)+18+ciclo) <= Tglob)) 
-                %2nd change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+18+ciclo)).and.(((5*12)+18+ciclo).LE.Tglob)) then
+                !2nd change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+27+ciclo)) && (((5*12)+27+ciclo) <= Tglob)) 
-                %3rd change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+27+ciclo)).and.(((5*12)+27+ciclo).LE.Tglob)) then
+                !3rd change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+36+ciclo)) && (((5*12)+36+ciclo) <= Tglob)) 
-                %4th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+36+ciclo)).and.(((5*12)+36+ciclo).LE.Tglob)) then
+                !4th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+45+ciclo)) && (((5*12)+45+ciclo) <= Tglob)) 
-                %5th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+45+ciclo)).and.(((5*12)+45+ciclo).LE.Tglob)) then
+                !5th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+54+ciclo)) && (((5*12)+54+ciclo) <= Tglob)) 
-                %6th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+54+ciclo)).and.(((5*12)+54+ciclo).LE.Tglob)) then
+                !6th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+63+ciclo)) && (((5*12)+63+ciclo) <= Tglob)) 
-                %7th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+63+ciclo)).and.(((5*12)+63+ciclo).LE.Tglob)) then
+                !7th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+72+ciclo)) && (((5*12)+72+ciclo) <= Tglob)) 
-                %8th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+72+ciclo)).and.(((5*12)+72+ciclo).LE.Tglob)) then
+                !8th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+81+ciclo)) && (((5*12)+81+ciclo) <= Tglob)) 
-                %9th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+81+ciclo)).and.(((5*12)+81+ciclo).LE.Tglob)) then
+                !9th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+90+ciclo)) && (((5*12)+90+ciclo) <= Tglob))  %Half of the cicle 7.5 years
-                %10th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+90+ciclo)).and.(((5*12)+90+ciclo).LE.Tglob)) then !Half of the cicle 7.5 years
+                !10th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+99+ciclo)) && (((5*12)+99+ciclo) <= Tglob)) 
-                %11th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+99+ciclo)).and.(((5*12)+99+ciclo).LE.Tglob)) then
+                !11th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+108+ciclo)) && (((5*12)+108+ciclo) <= Tglob)) 
-                %12th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+108+ciclo)).and.(((5*12)+108+ciclo).LE.Tglob)) then
+                !12th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+117+ciclo)) && (((5*12)+117+ciclo) <= Tglob)) 
-                %13th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+117+ciclo)).and.(((5*12)+117+ciclo).LE.Tglob)) then
+                !13th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+126+ciclo)) && (((5*12)+126+ciclo) <= Tglob)) 
-                %14 change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+126+ciclo)).and.(((5*12)+126+ciclo).LE.Tglob)) then
+                !14 change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+135+ciclo)) && (((5*12)+135+ciclo) <= Tglob)) 
-                %15th change
-                controllevel = controllevel+1 %TL decrease in 0.1
+            else if ((Draw.LE.((5*12)+135+ciclo)).and.(((5*12)+135+ciclo).LE.Tglob)) then
+                !15th change
+                controllevel = controllevel+1 !TL decrease in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+144+ciclo)) && (((5*12)+144+ciclo) <= Tglob)) 
-                %16th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+144+ciclo)).and.(((5*12)+144+ciclo).LE.Tglob)) then
+                !16th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+153+ciclo)) && (((5*12)+153+ciclo) <= Tglob)) 
-                %17th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+153+ciclo)).and.(((5*12)+153+ciclo).LE.Tglob)) then
+                !17th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+162+ciclo)) && (((5*12)+162+ciclo) <= Tglob)) 
-                %18th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+162+ciclo)).and.(((5*12)+162+ciclo).LE.Tglob)) then
+                !18th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+171+ciclo)) && (((5*12)+171+ciclo) <= Tglob)) 
-                %19th change
-                controllevel = controllevel-1 %TL rise in 0.1
+            else if ((Draw.LE.((5*12)+171+ciclo)).and.(((5*12)+171+ciclo).LE.Tglob)) then
+                !19th change
+                controllevel = controllevel-1 !TL rise in 0.1
                 go to 57
-            elseif ((Draw <= ((5*12)+180+ciclo)) && (((5*12)+180+ciclo) <= Tglob))  %Cicleï¿½s end 15 years
-                %20th change
-                controllevel = controllevel-1 %TL rise in 0.1
-                ciclo = ciclo + 180 %180 = 15(years)*12(months)
+            else if ((Draw.LE.((5*12)+180+ciclo)).and.(((5*12)+180+ciclo).LE.Tglob)) then !Cicle´s end 15 years
+                !20th change
+                controllevel = controllevel-1 !TL rise in 0.1
+                ciclo = ciclo + 180 !180 = 15(years)*12(months)
                 go to 57
             end if
         end if
         57 continue
         
-        if (Tglob >= tsim) 
-            for j=Draw,tsim
-                %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                if ((j == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                %Time vectors to introduce in the matrix
-		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-                    %Transfer the position information matrix into DRAWING MATRIX
-	                for i=1,NPrefino
+        if (Tglob.GE.tsim) then
+            do j=Draw,tsim
+                !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                if ((j.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                !Time vectors to introduce in the matrix
+		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+                    !Transfer the position information matrix into DRAWING MATRIX
+	                do i=1,NPrefino
  	                    DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                end do
    		            jdibujo = jdibujo + 1
                 end if
             end do
-            go to 1000 %End of simulation
-        elseif (Tglob < tsim) 
-            for j=Draw,Tglob
-                %Results matrix from third collum (t=1) until the end (t=j*tdatos)
-                if ((j == (jdibujo*Tdib)) && ((jdibujo*Tdib) <= tsim)) 
-	                %Time vectors to introduce in the matrix
-		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib %Frist matrix position -> Time (months)
-                    %Transfer the position information matrix into DRAWING MATRIX
-	                for i=1,NPrefino
+            go to 1000 !End of simulation
+        else if (Tglob.LT.tsim) then
+            do j=Draw,Tglob
+                !Results matrix from third collum (t=1) until the end (t=j*tdatos)
+                if ((j.EQ.(jdibujo*Tdib)).and.((jdibujo*Tdib).LE.tsim)) then
+	                !Time vectors to introduce in the matrix
+		            DibMatriz(1,jdibujo+2) = jdibujo*Tdib !Frist matrix position -> Time (months)
+                    !Transfer the position information matrix into DRAWING MATRIX
+	                do i=1,NPrefino
  	                    DibMatriz(i+1,jdibujo+2) = PzyRglobal(2,i)
 	                end do
    		            jdibujo = jdibujo + 1
@@ -2193,74 +2193,74 @@ Tglob = 1
             end do
         end if
         
-        if ((3*salto <= Tglob) && (Tglob < 3*(salto+1))) 
-            %SUMMER waves conditions
-            Waves = 4 %Number of waves in the season SUMMER
-            %Creation of H vector -> Deep water wave height
+        if ((3*salto.LE.Tglob).and.(Tglob.LT.3*(salto+1))) then
+            !SUMMER waves conditions
+            Waves = 4 !Number of waves in the season SUMMER
+            !Creation of H vector -> Deep water wave height
             deallocate (H)
             allocate (H(Waves))
-            %Creation of T vector -> Wave period
+            !Creation of T vector -> Wave period
             deallocate (T)
             allocate (T(Waves))
-            %Creation of L vector -> Deep water wave length
+            !Creation of L vector -> Deep water wave length
             deallocate (L)
             allocate (L(Waves))
-            %Creation of WF vector -> Percentage frecuency of each type of wave per day
+            !Creation of WF vector -> Percentage frecuency of each type of wave per day
             deallocate (WF)
             allocate (WF(Waves))
-            %Creation of Wn vector -> The number of waves each hour
+            !Creation of Wn vector -> The number of waves each hour
             deallocate (Wn)
             allocate (Wn(Waves))
             
-            %Introduction of the Deep water wave height values
+            !Introduction of the Deep water wave height values
             H(1) = 0.5
             H(2) = 1
             H(3) = 2
             H(4) = 3
-            %Introduction of the Wave period values
+            !Introduction of the Wave period values
             T(1) = 2.
             T(2) = 3.5
             T(3) = 4.5
             T(4) = 6.5
-            %Calculation of the Deep water wave length values
-            for i=1,Waves
-                L(i) = 1.56*(T(i)**2) %Units: [m] - CERC (2002)
+            !Calculation of the Deep water wave length values
+            do i=1,Waves
+                L(i) = 1.56*(T(i)**2) !Units: [m] - CERC (2002)
             end do
-            %Introduction of the Percentage frecuency of each type of wave 
+            !Introduction of the Percentage frecuency of each type of wave 
             WF(1) = 31.27
             WF(2) = 41.73
             WF(3) = 1.9
             WF(4) = 0.33
-            %Total frecuency = 75.23 %
-            %Calculation of the The number of waves each hour 
-            for i=1,Waves
-                Wn(i) = (60*60)/T(i) %60 s/min * 60 min/hours
+            !Total frecuency = 75.23 %
+            !Calculation of the The number of waves each hour 
+            do i=1,Waves
+                Wn(i) = (60*60)/T(i) !60 s/min * 60 min/hours
             end do
             
-            %SUMMER lake level
-            %TL = controllevel - fix(0.3/Dz) %Increase 0.3m from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+            !SUMMER lake level
+            !TL = controllevel - int(0.3/Dz) !Increase 0.3m from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
        
-            go to 1001 %Loops end before -> invierno =0
-        elseif ((3*(salto+1) <= Tglob) && (Tglob < 3*(salto+2))) 
-            %FALL waves conditions
-            Waves = 7 %Number of waves in the season FALL
-            %Creation of H vector -> Deep water wave height
+            go to 1001 !Loops end before -> invierno =0
+        else if ((3*(salto+1).LE.Tglob).and.(Tglob.LT.3*(salto+2))) then
+            !FALL waves conditions
+            Waves = 7 !Number of waves in the season FALL
+            !Creation of H vector -> Deep water wave height
             deallocate (H)
             allocate (H(Waves))
-            %Creation of T vector -> Wave period
+            !Creation of T vector -> Wave period
             deallocate (T)
             allocate (T(Waves))
-            %Creation of L vector -> Deep water wave length
+            !Creation of L vector -> Deep water wave length
             deallocate (L)
             allocate (L(Waves))
-            %Creation of WF vector -> Percentage frecuency of each type of wave per day
+            !Creation of WF vector -> Percentage frecuency of each type of wave per day
             deallocate (WF)
             allocate (WF(Waves))
-            %Creation of Wn vector -> The number of waves each hour
+            !Creation of Wn vector -> The number of waves each hour
             deallocate (Wn)
             allocate (Wn(Waves))
             
-            %Introduction of the Deep water wave height values
+            !Introduction of the Deep water wave height values
             H(1) = 0.5
             H(2) = 1
             H(3) = 2
@@ -2268,7 +2268,7 @@ Tglob = 1
             H(5) = 4
             H(6) = 5
             H(7) = 6
-            %Introduction of the Wave period values
+            !Introduction of the Wave period values
             T(1) = 2.
             T(2) = 3.8
             T(3) = 4.5
@@ -2276,11 +2276,11 @@ Tglob = 1
             T(5) = 6.5
             T(6) = 7.
             T(7) = 7.5
-            %Calculation of the Deep water wave length values
-            for i=1,Waves
-                L(i) = 1.56*(T(i)**2) %Units: [m] - CERC (2002)
+            !Calculation of the Deep water wave length values
+            do i=1,Waves
+                L(i) = 1.56*(T(i)**2) !Units: [m] - CERC (2002)
             end do
-            %Introduction of the Percentage frecuency of each type of wave 
+            !Introduction of the Percentage frecuency of each type of wave 
             WF(1) = 8.87
             WF(2) = 36.27
             WF(3) = 16.57
@@ -2288,102 +2288,102 @@ Tglob = 1
             WF(5) = 1.5
             WF(6) = 0.2
             WF(7) = 0.1
-            %Total frecuency = 72.9 %
-            %Calculation of the The number of waves each hour 
-            for i=1,Waves
-                Wn(i) = (60*60)/T(i) %60 s/min * 60 min/hours
+            !Total frecuency = 72.9 %
+            !Calculation of the The number of waves each hour 
+            do i=1,Waves
+                Wn(i) = (60*60)/T(i) !60 s/min * 60 min/hours
             end do
 
-            %FALL lake level
-            %TL = controllevel %Equal from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+            !FALL lake level
+            !TL = controllevel !Equal from WINTER -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
            
-            go to 1001 %Loops end before -> invierno =0
-        elseif ((3*(salto+2) <= Tglob) && (Tglob < 3*(salto+3))) 
-            invierno = 1 %Winter conditions
-            counter = counter + 3 %Winter conditions
-            %WINTER waves conditions
+            go to 1001 !Loops end before -> invierno =0
+        else if ((3*(salto+2).LE.Tglob).and.(Tglob.LT.3*(salto+3))) then
+            invierno = 1 !Winter conditions
+            counter = counter + 3 !Winter conditions
+            !WINTER waves conditions
             Waves = 1
-            %Creation of H vector -> Deep water wave height
+            !Creation of H vector -> Deep water wave height
             deallocate (H)
             allocate (H(Waves))
-            %Creation of T vector -> Wave period
+            !Creation of T vector -> Wave period
             deallocate (T)
             allocate (T(Waves))
-            %Creation of L vector -> Deep water wave length
+            !Creation of L vector -> Deep water wave length
             deallocate (L)
             allocate (L(Waves))
-            %Creation of WF vector -> Percentage frecuency of each type of wave per day
+            !Creation of WF vector -> Percentage frecuency of each type of wave per day
             deallocate (WF)
             allocate (WF(Waves))
-            %Creation of Wn vector -> The number of waves each hour
+            !Creation of Wn vector -> The number of waves each hour
             deallocate (Wn)
             allocate (Wn(Waves))
             
-            %Introduction of the Deep water wave height values
-            H(1) = 0
-            %Introduction of the Wave period values
-            T(1) = 0
-            %Calculation of the Deep water wave length values
-            L(1) = 1.56*(T(1)**2) %Units: [m] - CERC (2002)
-            %Introduction of the Percentage frecuency of each type of wave 
-            WF(1) = 0
-            %Calculation of the The number of waves each hour 
-            Wn(1) = (60*60)/T(1) %60 s/min * 60 min/hours
+            !Introduction of the Deep water wave height values
+            H(1) = 0.d0
+            !Introduction of the Wave period values
+            T(1) = 0.d0
+            !Calculation of the Deep water wave length values
+            L(1) = 1.56*(T(1)**2) !Units: [m] - CERC (2002)
+            !Introduction of the Percentage frecuency of each type of wave 
+            WF(1) = 0.d0
+            !Calculation of the The number of waves each hour 
+            Wn(1) = (60*60)/T(1) !60 s/min * 60 min/hours
             
-            %WINTER lake level
-            %TL = controllevel %No variation from FALL -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+            !WINTER lake level
+            !TL = controllevel !No variation from FALL -> ARMY CORPS OF ENGINEERS - DETROIT District (2011)
             
-            go to 1002 %Loop end after re-inizialization of variables
-        elseif (Tglob == 3*(salto+3)) 
-            counter = 1 %Winter conditions
-            salto = salto + 4 %Winter conditions
-            %SPRING waves conditions
-            Waves = 4 %Number of waves in the season SPRING
-            %Creation of H vector -> Deep water wave height
+            go to 1002 !Loop end after re-inizialization of variables
+        else if (Tglob.EQ.3*(salto+3)) then
+            counter = 1 !Winter conditions
+            salto = salto + 4 !Winter conditions
+            !SPRING waves conditions
+            Waves = 4 !Number of waves in the season SPRING
+            !Creation of H vector -> Deep water wave height
             deallocate (H)
             allocate (H(Waves))
-            %Creation of T vector -> Wave period
+            !Creation of T vector -> Wave period
             deallocate (T)
             allocate (T(Waves))
-            %Creation of L vector -> Deep water wave length
+            !Creation of L vector -> Deep water wave length
             deallocate (L)
             allocate (L(Waves))
-            %Creation of WF vector -> Percentage frecuency of each type of wave per day
+            !Creation of WF vector -> Percentage frecuency of each type of wave per day
             deallocate (WF)
             allocate (WF(Waves))
-            %Creation of Wn vector -> The number of waves each hour
+            !Creation of Wn vector -> The number of waves each hour
             deallocate (Wn)
             allocate (Wn(Waves))
             
-            %Introduction of the Deep water wave height values
+            !Introduction of the Deep water wave height values
             H(1) = 0.5
             H(2) = 1
             H(3) = 2
             H(4) = 3
-            %Introduction of the Wave period values
+            !Introduction of the Wave period values
             T(1) = 2.
             T(2) = 3.5
             T(3) = 4.5
             T(4) = 5.5
-            %Calculation of the Deep water wave length values
-            for i=1,Waves
-                L(i) = 1.56*(T(i)**2) %Units: [m] - CERC (2002)
+            !Calculation of the Deep water wave length values
+            do i=1,Waves
+                L(i) = 1.56*(T(i)**2) !Units: [m] - CERC (2002)
             end do
-            %Introduction of the Percentage frecuency of each type of wave 
+            !Introduction of the Percentage frecuency of each type of wave 
             WF(1) = 33.03
             WF(2) = 36.33
             WF(3) = 2.23
             WF(4) = 0.1
-            %Total frecuency = 71.67 %
-            %Calculation of the The number of waves each hour 
-            for i=1,Waves
-                Wn(i) = (60*60)/T(i) %60 s/min * 60 min/hours
+            !Total frecuency = 71.67 %
+            !Calculation of the The number of waves each hour 
+            do i=1,Waves
+                Wn(i) = (60*60)/T(i) !60 s/min * 60 min/hours
             end do
             
-            %SPRING lake level
-            %TL = controllevel - fix(0.4/Dz) %Increase 0.4m is the value obtained from ARMY CORPS OF ENGINEERS - DETROIT District (2011)
+            !SPRING lake level
+            !TL = controllevel - int(0.4/Dz) !Increase 0.4m is the value obtained from ARMY CORPS OF ENGINEERS - DETROIT District (2011)
             
-            go to 1001 %Loops end before -> invierno =0
+            go to 1001 !Loops end before -> invierno =0
         end if
     end if
     
@@ -2392,13 +2392,13 @@ Tglob = 1
     1002 continue
     Pmonth = 0
     Drem = 0
-	%RE-INIZIALIZATION OF VARIABLES
-    Volacumulado1 = 0
-    Volacumulado2 = 0
-    Volacumulafor = 0    
+	!RE-INIZIALIZATION OF VARIABLES
+    Volacumulado1 = 0.d0
+    Volacumulado2 = 0.d0
+    Volacumulado = 0.d0    
     Parametrorotura = 0
-    DistPcirc2 = 0
-    retroceso = 0.5
+    DistPcirc2 = 0.d0
+    retroceso = 0.5d0
     
     Tglob = Tglob + 1
     GO TO 500
@@ -2409,44 +2409,44 @@ call cpu_time(tac)
 write(*,*)'tiempo CPU:  ',tac-tic,'  seg.'
 11 format(F10.1,2x,F9.5,2x,10(F9.6,2x))
 
-%CLIFF PROFILE FOR EACH Tdib TIME
-DibMatriz(1,2) = tac-tic %CPU time
-for i = 1,NPrefino+1
+!CLIFF PROFILE FOR EACH Tdib TIME
+DibMatriz(1,2) = tac-tic !CPU time
+do i = 1,NPrefino+1
 	write (4,'(200(F15.7,x))') (DibMatriz(i,k),k=1,DimDiby+2)
 end do
 
-%CLIFF PROFILE BEFORE-AFTER FAILURE EVENT
-if (dimmatrizrotura == size(Matrizrotura,dim=2)) 
-    for i = 1,NPrefino+1
+!CLIFF PROFILE BEFORE-AFTER FAILURE EVENT
+if (dimmatrizrotura.EQ.size(Matrizrotura,dim=2)) then
+    do i = 1,NPrefino+1
         write (6,'(200(F15.7,x))') (Matrizrotura(i,k),k=1,dimmatrizrotura)
     end do
 else
     dimmatrizrotura = size(Matrizrotura,dim=2)
-    for i = 1,NPrefino+1
+    do i = 1,NPrefino+1
 	    write (6,'(200(F15.7,x))') (Matrizrotura(i,k),k=1,dimmatrizrotura)
     end do
 end if
 
-%RECESION VALUES FOR EACH POINT AT EACH FAILURE EVENT
-if (dimmatrizrecesion == size(Matrizrecesion,dim=2)) 
-    for i = 1,NPrefino+2
+!RECESION VALUES FOR EACH POINT AT EACH FAILURE EVENT
+if (dimmatrizrecesion.EQ.size(Matrizrecesion,dim=2)) then
+    do i = 1,NPrefino+2
 	    write (7,'(200(F15.7,x))') (Matrizrecesion(i,k),k=1,dimmatrizrecesion+1)
     end do
 else
     dimmatrizrecesion = size(Matrizrecesion,dim=2)
-    for i = 1,NPrefino+2
+    do i = 1,NPrefino+2
 	    write (7,'(200(F15.7,x))') (Matrizrecesion(i,k),k=1,dimmatrizrecesion)
     end do
 end if
 
-%GROUNDWATER VALUES FOR EACH FAILURE EVENT
-if (dimmatrizHwdraw == size(MatrizHwdraw,dim=2)) 
-    for i = 1,1000+1
+!GROUNDWATER VALUES FOR EACH FAILURE EVENT
+if (dimmatrizHwdraw.EQ.size(MatrizHwdraw,dim=2)) then
+    do i = 1,1000+1
 	    write (8,'(200(F15.7,x))') (MatrizHwdraw(i,k),k=1,dimmatrizHwdraw+1)
     end do
 else
     dimmatrizHwdraw = size(MatrizHwdraw,dim=2)
-    for i = 1,1000+1
+    do i = 1,1000+1
 	    write (8,'(200(F15.7,x))') (MatrizHwdraw(i,k),k=1,dimmatrizHwdraw)
     end do
 end if

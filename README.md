@@ -8,11 +8,12 @@ marea (lago Erie), de R. Castedo (UPM). La tesis doctoral relacionada está en
 
 | Fichero | Descripción |
 |---|---|
-| `Great_lake_v.1.f90` | Código original en Fortran (tal como se entregó). |
+| `Great_lake_v.1.f90` | Código original en Fortran (Intel Visual Fortran). |
 | `great_lake.py` | Traducción a Python del código Fortran. |
-| `ejemplos/caso_base/data.dat` | Fichero de datos de entrada del caso base. |
-| `tools/restore_fortran.py` | Convierte el `.f90` original en Fortran compilable con gfortran (referencia). |
-| `tools/compare_outputs.py` | Compara, valor a valor, las salidas de ambas versiones. |
+| `ejemplos/caso_base/data.dat` | Caso base: 1260 meses, sin playa, terreno saturado, un estrato. |
+| `ejemplos/caso_simple/data.dat` | Caso simple de comprobación: 10 años, con playa, nivel freático, dos estratos y un punto de estudio. |
+| `tools/restore_fortran.py` | Adapta el `.f90` para compilarlo con gfortran (cambios mínimos de sintaxis). |
+| `tools/compare_outputs.py` | Compara valor a valor las salidas de ambas versiones. |
 | `tools/verify.sh` | Compila el Fortran, ejecuta las dos versiones y compara los resultados. |
 
 ## Uso de la versión en Python
@@ -20,7 +21,7 @@ marea (lago Erie), de R. Castedo (UPM). La tesis doctoral relacionada está en
 Requiere Python 3 y NumPy.
 
 ```bash
-python great_lake.py ejemplos/caso_base
+python great_lake.py ejemplos/caso_simple
 ```
 
 Lee `data.dat` del directorio indicado y escribe allí `timerecesion.out`,
@@ -30,50 +31,45 @@ Lee `data.dat` del directorio indicado y escribe allí `timerecesion.out`,
 ## Verificación
 
 ```bash
-tools/verify.sh                 # caso base
-tools/verify.sh otro/directorio # cualquier otro data.dat
+tools/verify.sh ejemplos/caso_base
+tools/verify.sh ejemplos/caso_simple
 ```
 
-Con el caso base (1260 meses) las cinco salidas son **idénticas** a las del
-Fortran (más de 300 000 valores, diferencia máxima 0). El perfil completo
-también coincide bit a bit tras cada paso de tiempo. También se comprobaron dos
-variantes con playa (`Qb > 0`) y nivel freático (`groundwater = 1` y `0`), con
-resultados idénticos.
+En los dos casos las cinco salidas son **idénticas** a las del Fortran
+compilado con gfortran (diferencia máxima 0). Entre los dos casos se ejercitan
+todos los bloques del modelo:
+
+- erosión por esfuerzo cortante, por impacto del oleaje y por run-up;
+- formación de playa y berma;
+- roturas circulares, incluidas las descartadas por "crear material", y
+  roturas por vuelco;
+- salto temporal por protección de derrubios;
+- nivel freático de los tipos 1 y 2.
 
 La traducción es literal a propósito para reproducir exactamente el
 comportamiento numérico del original:
 
 - Los índices empiezan en 1 y se respetan los bucles DO y los GO TO.
-- Las divisiones enteras de Fortran se mantienen.
-- Las constantes sin sufijo `d0` (`9.81`, `1.56`, `3.1416`, `0.05`…) se tratan
-  como de precisión simple, incluido `pi`.
+- Se respeta la división entera.
+- Las constantes escritas sin `d0` en el original son de precisión simple,
+  incluido `pi = 3.141592653589793`, que vale 3.1415927410…
 - Las funciones elementales son las de la libm de C.
 
-## Aspectos del código original a revisar
+La versión en Python es más lenta que la de Fortran: unos 60 s frente a ~1 s
+en el caso base.
 
-Se han conservado tal cual en la traducción para no cambiar los resultados,
-pero conviene revisarlos:
+## Notas sobre el código original
 
-1. **Esfuerzo cortante nulo**: en `SS = (1/2)*Fw*seawater*(Uo**2)`, `(1/2)` es
-   una división entera y vale 0. La erosión por cortante es
-   `No*Kss*(-SFmin)**p`. Con `p = 1` sale negativa y se anula, así que nunca
-   actúa. Con un `p` no entero el resultado sería NaN. Seguramente debería ser
-   `0.5`.
-2. **`pi` en precisión simple**: `real*8, parameter :: pi = 3.141592653589793`
-   sin `d0` vale 3.1415927410…
-3. **`WBD = (int(WH(j)*1.28*10))/10`**: la profundidad de rotura se trunca a
-   metros enteros (división entera), no a decímetros.
-4. **`Volacumulafor`**: el fichero entregado usa esta variable, que no está
-   declarada y no compilaría con `IMPLICIT NONE`. Es un residuo del reemplazo
-   automático `do` → `for`; se ha interpretado como `Volacumulado`, que
-   controla el tiempo de protección por derrubios.
-5. **Variación interanual del nivel del lago desactivada**: `changelakelevel`
-   está desactivada y las líneas `TL = controllevel…` están comentadas, así que
-   el nivel del lago no cambia.
-6. **`lakelevel` es INTEGER** pero `data.dat` trae `0.0`. Con gfortran esa
-   lectura falla. La versión Python lee un real y lo trunca.
-7. **Con gfortran**, `open(6, file='Matriz_roturas.out')` hace que los mensajes
-   de pantalla se escriban también en ese fichero, porque la unidad 6 es la
-   salida estándar. Con Intel Fortran, el compilador original, no ocurre.
-
-`marea.dat` no se usa: el `open` correspondiente está comentado en el código.
+- `lakelevel` es INTEGER, pero `data.dat` trae `0.0`. gfortran no acepta esa
+  lectura, así que la referencia lee un real y lo trunca, igual que la versión
+  Python. Intel Fortran sí la acepta.
+- Varias constantes no llevan `d0` (`pi`, `1.56`, `9.81` en `freshwater`, las
+  frecuencias del oleaje…), por lo que se evalúan en precisión simple. El
+  efecto es pequeño, pero conviene saberlo.
+- La variación interanual del nivel del lago (`changelakelevel`) está
+  desactivada y las líneas `TL = controllevel…` están comentadas, así que el
+  nivel del lago no cambia.
+- Con gfortran, `open(6, file='Matriz_roturas.out')` hace que los mensajes de
+  pantalla se escriban también en ese fichero, porque la unidad 6 es la salida
+  estándar. `tools/verify.sh` los filtra. Con Intel Fortran no ocurre.
+- `marea.dat` no se usa: el `open` correspondiente está comentado.

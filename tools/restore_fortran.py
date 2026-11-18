@@ -1,76 +1,63 @@
 #!/usr/bin/env python3
-"""Genera una version compilable con gfortran de Great_lake_v.1.f90.
+"""Genera una version del original Great_lake_v.1.f90 compilable con gfortran.
 
-El fichero original tiene sintaxis mezclada (comentarios con %, "for" en lugar
-de "do", "&&", round/fix, IF sin THEN, declaraciones [allocatable] de Compaq/
-Intel Visual Fortran...). Este script lo devuelve a Fortran valido sin cambiar
-la logica, para usarlo como referencia al verificar la traduccion a Python.
+El original esta escrito para Intel/Compaq Visual Fortran y usa algunas
+extensiones que gfortran no acepta. Este script hace solo los cambios minimos,
+sin tocar la logica ni las constantes, para usarlo como referencia al
+verificar la traduccion a Python:
 
-Cambios aplicados:
-  * % -> !, for -> do, end for -> end do, && -> .and., anade THEN
-  * round() -> anint(), fix() -> int()
-  * real*8 x[allocatable](:) -> real*8, allocatable :: x(:)
-  * Volacumulafor -> Volacumulado (variable sin declarar con IMPLICIT NONE;
-    resto del reemplazo automatico do -> for)
-  * se comenta "call seed(iseed)" (extension DEC, no se usa)
+  * real*8 x[allocatable](:)  ->  real*8, allocatable :: x(:)
+  * parameter z=500,...        ->  integer, parameter :: z=500,...
+  * se comenta "call seed(iseed)" (extension DEC; no se usa)
   * lakelevel (INTEGER) se lee a traves de un REAL, porque data.dat trae "0.0"
-  * write(2,11) Tglob -> dble(Tglob) (formato F con un entero)
+    y gfortran no acepta ese valor para un entero
+  * write(2,11) Tglob -> dble(Tglob) (el formato 11 usa F para un entero)
 
 Uso: python restore_fortran.py Great_lake_v.1.f90 salida.f90
 """
-import re, sys
-src = open(sys.argv[1], encoding='latin-1').read().splitlines()
-out = []
-def close_paren(s, start):
-    d = 0
-    for i in range(start, len(s)):
-        if s[i] == '(':
-            d += 1
-        elif s[i] == ')':
-            d -= 1
-            if d == 0:
-                return i
-    return -1
-for line in src:
-    line = line.replace('%', '!')
-    code, sep, com = line.partition('!')
-    code = code.replace('Volacumulafor', 'Volacumulado')
-    code = re.sub(r'\bend\s+for\b', 'end do', code)
-    code = re.sub(r'\bfor\b', 'do', code)
-    code = code.replace('&&', '.and.')
-    code = re.sub(r'\bround\(', 'anint(', code)
-    code = re.sub(r'\bfix\(', 'int(', code)
-    code = re.sub(r'^\s*parameter z=', 'integer, parameter :: z=', code)
-    code = code.replace('real*8 Zc', 'real*8 Zc, rlakelevel')
-    if re.match(r'\s*call seed', code):
-        code = '! ' + code
-    code = re.sub(r'^read\(1,\*\) lakelevel\s*$', 'read(1,*) rlakelevel; lakelevel = int(rlakelevel)', code)
-    code = code.replace('write(2,11) Tglob,', 'write(2,11) dble(Tglob),')
-    m = re.match(r'(\s*(?:\d+\s+)?)(if|elseif|else if|IF)\s*\(', code, re.I)
-    if m:
-        st = code.index('(', m.end(2))
-        e = close_paren(code, st)
-        if code[e+1:].strip() == '':
-            code = code[:e+1] + ' then'
-    # allocatable declarations (CVF syntax)
-    if re.match(r'\s*real\*8\s', code) and '[allocatable]' in code:
-        decl = code.strip()[len('real*8'):].strip()
-        items, depth, cur = [], 0, ''
-        for ch in decl:
-            if ch == ',' and depth == 0:
-                items.append(cur.strip()); cur = ''
-                continue
-            depth += ch == '('
-            depth -= ch == ')'
-            cur += ch
-        items.append(cur.strip())
-        lines = []
-        for it in items:
-            if '[allocatable]' in it:
-                lines.append('real*8, allocatable :: ' + it.replace('[allocatable]', ''))
-            else:
-                lines.append('real*8 ' + it)
-        out.extend(lines)
-        continue
-    out.append(code + (('!' + com) if sep else ''))
-open(sys.argv[2], 'w').write('\n'.join(out) + '\n')
+import re
+import sys
+
+
+def split_decl(decl):
+    items, depth, cur = [], 0, ""
+    for ch in decl:
+        if ch == "," and depth == 0:
+            items.append(cur.strip())
+            cur = ""
+            continue
+        depth += ch == "("
+        depth -= ch == ")"
+        cur += ch
+    items.append(cur.strip())
+    return items
+
+
+def main(src, dst):
+    lines = open(src, encoding="latin-1").read().replace("\r", "").splitlines()
+    out = []
+    for line in lines:
+        code, sep, com = line.partition("!")
+        low = code.strip().lower()
+        if low.startswith("real*8") and "[allocatable]" in code:
+            for it in split_decl(code.strip()[len("real*8"):].strip()):
+                if "[allocatable]" in it:
+                    out.append("real*8, allocatable :: " + it.replace("[allocatable]", ""))
+                else:
+                    out.append("real*8 " + it)
+            continue
+        if re.match(r"\s*parameter\s+z\s*=", code, re.I):
+            code = re.sub(r"parameter", "integer, parameter ::", code, count=1, flags=re.I)
+        if re.match(r"\s*call\s+seed", code, re.I):
+            code = "! " + code
+        if re.match(r"\s*read\(1,\*\)\s*lakelevel\s*$", code, re.I):
+            code = "read(1,*) rlakelevel; lakelevel = int(rlakelevel)"
+        if re.match(r"\s*real\*8\s+Zc\s*$", code, re.I):
+            code = code.rstrip() + ", rlakelevel"
+        code = re.sub(r"write\(2,11\)\s*Tglob,", "write(2,11) dble(Tglob),", code, flags=re.I)
+        out.append(code + (sep + com if sep else ""))
+    open(dst, "w", encoding="latin-1").write("\n".join(out) + "\n")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1], sys.argv[2])
