@@ -26,8 +26,8 @@ import sys
 import time
 
 import numpy as np
-from PySide6.QtCore import QObject, Qt, QThread, Signal
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QAction, QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDockWidget,
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
@@ -245,6 +245,135 @@ class Lienzo(FigureCanvas):
             ax.grid(True, color="#e6e6e6", lw=0.6)
             for s in ("top", "right"):
                 ax.spines[s].set_visible(False)
+
+
+class LineaTemporal(QWidget):
+    """Barra de tiempo mes a mes con marcas de roturas y meses sin calculo."""
+
+    valor_cambiado = Signal(int)
+
+    def __init__(self):
+        super().__init__()
+        self.tsim = 0
+        self.valor = 0
+        self.roturas = {}     # mes -> numero de roturas
+        self.sin_calc = {}    # mes -> "invierno" | "derrubios"
+        self.setMinimumHeight(54)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setMouseTracking(True)
+        self.setToolTip("Arrastra o usa ← → (un mes), RePág/AvPág (un año), Inicio/Fin")
+
+    def configurar(self, tsim, roturas, invierno, derrubios):
+        self.tsim = int(tsim)
+        self.roturas = {}
+        for m in roturas:
+            self.roturas[m] = self.roturas.get(m, 0) + 1
+        self.sin_calc = {m: "invierno" for m in invierno}
+        self.sin_calc.update({m: "derrubios" for m in derrubios})
+        self.valor = 0
+        self.update()
+
+    def _x0x1(self):
+        return 14.0, float(self.width() - 14)
+
+    def _x(self, mes):
+        x0, x1 = self._x0x1()
+        return x0 + (x1 - x0) * (mes / max(1, self.tsim))
+
+    def set_valor(self, v, emitir=True):
+        v = max(0, min(self.tsim, int(v)))
+        if v != self.valor:
+            self.valor = v
+            self.update()
+            if emitir:
+                self.valor_cambiado.emit(v)
+
+    def _valor_en(self, x):
+        x0, x1 = self._x0x1()
+        return round((x - x0) / max(1.0, x1 - x0) * self.tsim)
+
+    def mousePressEvent(self, ev):
+        if self.tsim:
+            self.set_valor(self._valor_en(ev.position().x()))
+
+    def mouseMoveEvent(self, ev):
+        if self.tsim and ev.buttons() & Qt.LeftButton:
+            self.set_valor(self._valor_en(ev.position().x()))
+
+    def wheelEvent(self, ev):
+        if self.tsim:
+            self.set_valor(self.valor + (1 if ev.angleDelta().y() < 0 else -1))
+
+    def keyPressEvent(self, ev):
+        pasos = {Qt.Key_Right: 1, Qt.Key_Left: -1, Qt.Key_PageDown: 12, Qt.Key_PageUp: -12}
+        if ev.key() in pasos:
+            self.set_valor(self.valor + pasos[ev.key()])
+        elif ev.key() == Qt.Key_Home:
+            self.set_valor(0)
+        elif ev.key() == Qt.Key_End:
+            self.set_valor(self.tsim)
+        else:
+            super().keyPressEvent(ev)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), QColor(CANVAS_BG))
+        x0, x1 = self._x0x1()
+        yb, hb = 18.0, 12.0
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor("#3a414d"))
+        p.drawRoundedRect(QRectF(x0, yb, x1 - x0, hb), 4, 4)
+        if not self.tsim:
+            p.setPen(QColor("#8a93a3"))
+            p.drawText(self.rect(), Qt.AlignCenter, "Calcula para activar la línea temporal")
+            return
+        w = (x1 - x0) / self.tsim
+        # meses sin calculo
+        for m, tipo in self.sin_calc.items():
+            c = QColor("#56637a") if tipo == "invierno" else QColor("#8a6a3f")
+            p.fillRect(QRectF(self._x(m - 1), yb, max(1.0, w), hb), c)
+        # parte recorrida
+        p.setBrush(QColor(ACCENT))
+        p.setOpacity(0.55)
+        p.drawRoundedRect(QRectF(x0, yb, self._x(self.valor) - x0, hb), 4, 4)
+        p.setOpacity(1.0)
+        # roturas
+        for m, n in self.roturas.items():
+            x = self._x(m - 0.5)
+            p.setPen(QPen(QColor("#ff4d4d"), 2 if n > 1 else 1.4))
+            p.drawLine(QPointF(x, yb - 7 - min(6, 2 * (n - 1))), QPointF(x, yb - 1))
+        # escala en anos
+        anos = self.tsim / 12.0
+        paso = 1
+        for cand in (1, 2, 5, 10, 20, 25, 50, 100):
+            if (x1 - x0) / max(1e-9, anos / cand) >= 42:
+                paso = cand
+                break
+        f = p.font()
+        f.setPointSizeF(7.5)
+        p.setFont(f)
+        a = 0
+        while a * 12 <= self.tsim:
+            x = self._x(a * 12)
+            p.setPen(QPen(QColor("#8a93a3"), 1))
+            p.drawLine(QPointF(x, yb + hb), QPointF(x, yb + hb + 4))
+            p.drawText(QRectF(x - 20, yb + hb + 4, 40, 14), Qt.AlignHCenter, f"{a}")
+            a += paso
+        ultimo = self._x((a - paso) * 12)
+        if x1 - ultimo > 60:
+            p.drawText(QRectF(x1 - 60, yb + hb + 4, 60, 14), Qt.AlignRight, "años")
+        # cursor
+        x = self._x(self.valor)
+        p.setPen(QPen(QColor("#00e5ff"), 2))
+        p.drawLine(QPointF(x, yb - 6), QPointF(x, yb + hb + 3))
+        p.setBrush(QBrush(QColor("#00e5ff")))
+        p.setPen(QPen(QColor("black"), 1))
+        p.drawEllipse(QPointF(x, yb + hb / 2), 6, 6)
+        if self.hasFocus():
+            p.setPen(QPen(QColor("#00e5ff"), 1, Qt.DotLine))
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +660,60 @@ class Ventana(QMainWindow):
         nav.setStyleSheet("background: #e9e9e9; border: none;")
         v.addWidget(nav)
         v.addWidget(self.lienzo, 1)
+
+        barra = QWidget()
+        barra.setStyleSheet(f"background: {CANVAS_BG}; color: {CANVAS_FG};")
+        bl = QVBoxLayout(barra)
+        bl.setContentsMargins(8, 2, 8, 6)
+        bl.setSpacing(2)
+        fila = QHBoxLayout()
+        estilo_b = ("QPushButton { background: #3a414d; color: #e6e9ee; border: 1px solid #4b5462;"
+                    " border-radius: 3px; padding: 3px 8px; min-width: 26px; }"
+                    "QPushButton:hover { border-color: %s; }"
+                    "QPushButton:disabled { color: #6b7380; }" % ACCENT)
+        self.b_inicio = QPushButton("⏮")
+        self.b_atras = QPushButton("▕◀")
+        self.b_play = QPushButton("▶")
+        self.b_adelante = QPushButton("▶▏")
+        self.b_fin = QPushButton("⏭")
+        for b, tip in ((self.b_inicio, "Ir al inicio (perfil inicial)"),
+                       (self.b_atras, "Mes anterior (←)"), (self.b_play, "Reproducir / pausa"),
+                       (self.b_adelante, "Mes siguiente (→)"), (self.b_fin, "Ir al final")):
+            b.setToolTip(tip)
+        for b, fn in ((self.b_inicio, lambda: self.linea.set_valor(0)),
+                      (self.b_atras, lambda: self.linea.set_valor(self.linea.valor - 1)),
+                      (self.b_play, self.reproducir),
+                      (self.b_adelante, lambda: self.linea.set_valor(self.linea.valor + 1)),
+                      (self.b_fin, lambda: self.linea.set_valor(self.linea.tsim))):
+            b.setStyleSheet(estilo_b)
+            b.clicked.connect(fn)
+            fila.addWidget(b)
+        fila.addSpacing(8)
+        fila.addWidget(QLabel("Velocidad:"))
+        self.cb_vel = QComboBox()
+        self.cb_vel.addItems(["Lenta", "Normal", "Rápida", "Muy rápida"])
+        self.cb_vel.setCurrentIndex(1)
+        self.cb_vel.setStyleSheet("background: #3a414d; color: #e6e9ee;")
+        self.cb_vel.currentIndexChanged.connect(self._velocidad)
+        fila.addWidget(self.cb_vel)
+        fila.addStretch(1)
+        leyenda = QLabel('<span style="color:#ff4d4d">┃</span> rotura &nbsp; '
+                         '<span style="color:#56637a">█</span> invierno (sin cálculo) &nbsp; '
+                         '<span style="color:#8a6a3f">█</span> protección por derrubios')
+        leyenda.setStyleSheet("color: #aab2bf; font-size: 8pt;")
+        fila.addWidget(leyenda)
+        bl.addLayout(fila)
+        self.linea = LineaTemporal()
+        self.linea.valor_cambiado.connect(self._cambio_mes)
+        bl.addWidget(self.linea)
+        self.lb_mes = QLabel("")
+        self.lb_mes.setStyleSheet(f"color: {CANVAS_FG}; font-weight: bold;")
+        bl.addWidget(self.lb_mes)
+        v.addWidget(barra)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._tick)
+        self._velocidad()
+        self._activar_linea(False)
         self.setCentralWidget(w)
 
     def _crear_panel_derecho(self):
@@ -820,7 +1003,13 @@ class Ventana(QMainWindow):
                    and self.tb_salidas.item(r, 0).checkState() == Qt.Checked]
             if vis:
                 terreno = self.res["DibMatriz"][2:N + 2, vis[-1] + 3]
-        ax.fill_betweenx(z, ymin - 1e6, terreno, color="#6b5a45", alpha=0.55, lw=0)
+        self._terreno_base = terreno
+        self._fill_terreno = ax.fill_betweenx(z, ymin - 1e6, terreno, color="#6b5a45",
+                                              alpha=0.55, lw=0, zorder=0)
+        self._lineas_tenues = []
+        self._art_mes = []
+        self._z_actual = z
+        self._ymin_actual = ymin
         ax.axhline(zlago, color="#4fa3e0", lw=1.2, ls="-", label=f"Nivel del lago ({zlago:.2f} m)")
         ax.plot(y0, z, color="#f0f0f0", lw=1.8, label="Perfil inicial (año 0, datos)")
         ax.plot([p[1] for p in d["Pzy"]], [p[0] for p in d["Pzy"]], "o", ms=3.5,
@@ -853,16 +1042,18 @@ class Ventana(QMainWindow):
             pp = self.res.get("primer_paso")
             if pp is not None and self.ck_primer.isChecked():
                 mes_pp, perfil_pp = pp
-                ax.plot(perfil_pp, z, color="#9fb3c8", lw=1.3, ls=(0, (4, 2)),
-                        alpha=0.4 if sel else 1.0,
-                        label=f"Tras el 1.er mes calculado (mes {mes_pp})")
+                ln, = ax.plot(perfil_pp, z, color="#9fb3c8", lw=1.3, ls=(0, (4, 2)),
+                              alpha=0.4 if sel else 1.0,
+                              label=f"Tras el 1.er mes calculado (mes {mes_pp})")
+                self._lineas_tenues.append(ln)
             for r in cols:
                 k = r + 3
                 ano = Dib[1, k] / 12.0
                 if ano <= 0:
                     continue
-                ax.plot(Dib[2:N + 2, k], z, color=cmap(norm(ano)), lw=1.2,
-                        alpha=0.3 if sel else 1.0)
+                ln, = ax.plot(Dib[2:N + 2, k], z, color=cmap(norm(ano)), lw=1.2,
+                              alpha=0.3 if sel else 1.0)
+                self._lineas_tenues.append(ln)
             if cols:
                 sm = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
                 cb = lz.fig.colorbar(sm, ax=ax, pad=0.015, fraction=0.04)
@@ -912,6 +1103,16 @@ class Ventana(QMainWindow):
                             edgecolor="#5a6270", labelcolor=CANVAS_FG)
             leg.set_draggable(True)
         lz.fig.tight_layout()
+        if hay_res:
+            self._linea_mes, = ax.plot(y0, z, color="#00e5ff", lw=2.6, zorder=6, visible=False)
+            self._txt_mes = ax.text(0.015, 0.975, "", transform=ax.transAxes, va="top",
+                                    ha="left", fontsize=10, fontweight="bold", color="#00e5ff",
+                                    zorder=7, bbox=dict(boxstyle="round,pad=0.35",
+                                                        fc="#1d2128", ec="#00e5ff", lw=0.8))
+            self._txt_mes.set_visible(False)
+            self._actualizar_mes(redibujar=False)
+        else:
+            self._linea_mes = None
         lz.draw_idle()
 
     # --------------------------------------------------------- resultados
@@ -961,8 +1162,109 @@ class Ventana(QMainWindow):
                 c.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 tr.setItem(i, k, c)
         self.tabs_der.setTabText(1, f"Roturas ({len(r['roturas'])})")
+        self.linea.configurar(r["meta"]["tsim"], [m for m, *_ in r["roturas"]],
+                              r["mensual"]["invierno"], r["mensual"]["derrubios"])
+        self._activar_linea(True)
         self.dibujar_perfil()
         self.dibujar_grafica()
+
+    # ------------------------------------------------------ linea temporal
+    def _activar_linea(self, activa):
+        for b in (self.b_inicio, self.b_atras, self.b_play, self.b_adelante, self.b_fin,
+                  self.cb_vel):
+            b.setEnabled(activa)
+        if not activa:
+            self.timer.stop()
+            self.b_play.setText("▶")
+            self.linea.configurar(0, [], [], [])
+            self.lb_mes.setText("")
+
+    def _velocidad(self, *_):
+        self.timer.setInterval([350, 140, 60, 25][self.cb_vel.currentIndex()])
+
+    def reproducir(self):
+        if self.timer.isActive():
+            self.timer.stop()
+            self.b_play.setText("▶")
+            return
+        if self.linea.valor >= self.linea.tsim:
+            self.linea.set_valor(0)
+        self.b_play.setText("⏸")
+        self.timer.start()
+
+    def _tick(self):
+        if self.linea.valor >= self.linea.tsim:
+            self.timer.stop()
+            self.b_play.setText("▶")
+            return
+        self.linea.set_valor(self.linea.valor + 1)
+
+    def _cambio_mes(self, _):
+        self._actualizar_mes()
+
+    def _perfil_mes(self, mes):
+        """Perfil (posiciones y) al final del mes indicado; mes 0 = inicial."""
+        r = self.res
+        men = r["mensual"]
+        i = int(np.searchsorted(men["meses"], mes, side="right")) - 1
+        if mes <= 0 or i < 0:
+            return r["profile_inicial"][2, 1:r["meta"]["N"] + 1]
+        return men["perfiles"][i]
+
+    def _actualizar_mes(self, redibujar=True):
+        if self.res is None or getattr(self, "_linea_mes", None) is None:
+            return
+        mes = self.linea.valor
+        ax = self.lienzo.ax
+        for a in self._art_mes:
+            a.remove()
+        self._art_mes = []
+        activo = mes > 0
+        for ln in self._lineas_tenues:
+            ln.set_alpha(0.22 if activo else 1.0)
+        self._linea_mes.set_visible(activo)
+        self._txt_mes.set_visible(activo)
+        z = self._z_actual
+        meta = self.res["meta"]
+        if activo:
+            perfil = self._perfil_mes(mes)
+            self._linea_mes.set_xdata(perfil)
+            self._fill_terreno.remove()
+            self._fill_terreno = ax.fill_betweenx(z, self._ymin_actual - 1e6, perfil,
+                                                  color="#6b5a45", alpha=0.55, lw=0, zorder=0)
+            rot = [(m, v, a, b) for (m, v, a, b) in self.res["roturas"] if m == mes]
+            for _, _, antes, _ in rot:
+                ln, = ax.plot(antes, z, color="#ff6b6b", lw=1.0, ls="--", zorder=5)
+                self._art_mes.append(ln)
+            P0 = self.res["profile_inicial"]
+            TL, kc = meta["TL"], meta["crestatalud"]
+            r_lago = P0[2, TL] - perfil[TL - 1]
+            r_cresta = P0[2, kc] - perfil[kc - 1]
+            men = self.res["mensual"]
+            if mes in set(men["invierno"]):
+                estado = "invierno: no se calcula"
+            elif mes in set(men["derrubios"]):
+                estado = "protegido por derrubios: sin erosión"
+            else:
+                estado = "calculado"
+            txt = f"Mes {mes}  ·  año {mes / 12:.2f}"
+            if rot:
+                txt += f"\n{len(rot)} rotura{'s' if len(rot) > 1 else ''} " \
+                       f"({sum(v for _, v, _, _ in rot):.1f} m³/m)"
+            self._txt_mes.set_text(txt)
+            self.lb_mes.setText(
+                f"Mes {mes} de {meta['tsim']} (año {mes / 12:.2f}) · {estado} · "
+                f"retroceso: nivel del lago {_f2(r_lago)} m, cresta {_f2(r_cresta)} m"
+                + (f" · {len(rot)} rotura(s)" if rot else ""))
+        else:
+            self._fill_terreno.remove()
+            terreno = self._terreno_base
+            self._fill_terreno = ax.fill_betweenx(z, self._ymin_actual - 1e6, terreno,
+                                                  color="#6b5a45", alpha=0.55, lw=0, zorder=0)
+            self.lb_mes.setText(f"Mes 0 (perfil inicial) · arrastra la barra para ver la "
+                                f"evolución mes a mes hasta el mes {meta['tsim']}")
+        if redibujar:
+            self.lienzo.draw_idle()
 
     def _marcar_salidas(self, estado):
         t = self.tb_salidas
@@ -1272,6 +1574,7 @@ class Ventana(QMainWindow):
 
     def _limpiar_resultados(self):
         self.res = None
+        self._activar_linea(False)
         self.tb_salidas.setRowCount(0)
         self.tb_roturas.setRowCount(0)
         self.tabs_der.setTabText(1, "Roturas")

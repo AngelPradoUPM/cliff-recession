@@ -55,6 +55,13 @@ python great_lake_gui.py ejemplos/caso_simple/data.dat
     coincidir con el Fortran.
   - *Nivel / mareas*: carga y representación de una serie de niveles. Solo se
     visualiza; el modelo usa un nivel del lago constante.
+- **Línea temporal** (debajo de la vista central): una barra que se arrastra
+  para ver el perfil mes a mes. También se maneja con las flechas (un mes),
+  RePág/AvPág (un año) y Inicio/Fin. Tiene botones de reproducir y avanzar o
+  retroceder un mes, y un selector de velocidad. En la barra se marcan los
+  meses con roturas (rojo), los meses de invierno, que no se calculan, y los
+  meses de protección por derrubios. En los meses con rotura se dibuja, con
+  línea discontinua, el perfil antes de cada rotura.
 - **Calcular**: se ejecuta en segundo plano, con barra de progreso y botón
   para detener. Los ficheros de salida se guardan en la carpeta `resultados/`,
   junto al `data.dat`. Los resultados son idénticos a los de `great_lake.py`

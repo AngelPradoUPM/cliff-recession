@@ -490,6 +490,10 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
     trec = []      # filas de timerecesion.out
     roturas = []   # (mes, volumen, perfil antes, perfil despues)
     primer_paso = None   # (mes, perfil) al final del primer mes calculado
+    meses_calc = []      # meses en los que se calcula erosion
+    perfiles_mes = []    # perfil al final de cada mes calculado
+    meses_invierno = []  # meses sin calculo (invierno)
+    meses_derrubios = [] # meses sin erosion por proteccion de derrubios
 
     def record(jt):
         """Guarda el perfil en DibMatriz si jt es un instante de salida."""
@@ -535,6 +539,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
         goto = 1001
 
         if invierno == 1:
+            t_inv = Tglob
             salto = salto + counter
             if Tglob == 3 * (salto - 2) + 1:
                 Tglob += 2
@@ -546,6 +551,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
                 Draw13 = 0; Draw14 = 0
             if counter == 4:
                 counter = 1
+            meses_invierno.extend(range(t_inv, min(Tglob, tsim) + 1))
             Waves, H, T, L, WF, Wn = set_waves("spring", seasons)
 
             last = tsim if Tglob >= tsim else Tglob
@@ -1222,6 +1228,8 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
             # 54
             if primer_paso is None:
                 primer_paso = (Tglob, P[2, 1:N + 1].astype(float))
+            meses_calc.append(Tglob)
+            perfiles_mes.append(P[2, 1:N + 1].astype(np.float32))
             record(Tglob)
 
             # Tiempo sin erosion por proteccion de los derrubios
@@ -1252,6 +1260,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
             elif Pmonth != 0:
                 Draw = Tglob
                 Tglob = Tglob + Pmonth
+                meses_derrubios.extend(range(Draw + 1, min(Tglob, tsim) + 1))
                 if Tglob > Draw + 12:
                     yearjump = idiv(Tglob - Draw, 12)
                     salto = salto + 4 * yearjump
@@ -1326,6 +1335,11 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
         "timerecesion": trec,
         "roturas": roturas,
         "primer_paso": primer_paso,
+        "mensual": dict(meses=np.array(meses_calc, dtype=int),
+                        perfiles=(np.array(perfiles_mes) if perfiles_mes
+                                  else np.zeros((0, N), dtype=np.float32)),
+                        invierno=sorted(set(meses_invierno)),
+                        derrubios=sorted(set(meses_derrubios))),
         "meta": dict(N=N, tsim=tsim, Tdib=Tdib, Dz=float(Dz), TL=TL,
                      zerolevel=zerolevel, crestatalud=crestatalud,
                      seepagelevel=seepagelevel, label=label[1:nlabel + 1],
