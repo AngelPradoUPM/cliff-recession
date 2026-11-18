@@ -619,11 +619,55 @@ def _fs_spencer_malla(reb, ref, devolver_theta=False):
     return (f, th) if devolver_theta else f
 
 
+# Modo mar: valores por defecto basados en la costa de Holderness (tesis,
+# cap. 9.5.1): amplitud de marea 3 m, periodo 12.46 h, subida relativa del nivel
+# del mar 6 mm/ano y ola media en aguas profundas H0 = 0.98 m (boya de Hornsea).
+# Este modelo erosiona solo cuando las olas superan unos umbrales, asi que una
+# unica ola media no basta: el oleaje por defecto es una distribucion
+# ILUSTRATIVA cuya altura media anual coincide con esos 0.98 m (con temporales
+# de 3-4 m, mas frecuentes en invierno). Conviene sustituirla por datos reales.
+SEASONS_MAR = {
+    "winter": ([0.5, 1, 2, 3, 4], [5.0, 6.5, 7.66, 8.5, 9.0], [30, 30, 20, 8, 2]),
+    "spring": ([0.5, 1, 2, 3, 4], [5.0, 6.5, 7.66, 8.5, 9.0], [40, 30, 15, 4, 1]),
+    "summer": ([0.5, 1, 2, 3, 4], [5.0, 6.5, 7.66, 8.5, 9.0], [50, 30, 8, 2, 0.5]),
+    "fall": ([0.5, 1, 2, 3, 4], [5.0, 6.5, 7.66, 8.5, 9.0], [35, 30, 18, 6, 1.5]),
+}
+MAR_TESIS = {"amplitud": 3.0, "subida_mm_ano": 6.0, "niveles": 15}
+ESTACION_DEL_MES = ("winter", "winter", "winter", "spring", "spring", "spring",
+                    "summer", "summer", "summer", "fall", "fall", "fall")
+
+
+def bandas_marea(amplitud, dz, niveles_max=21):
+    """Niveles de agua de una marea sinusoidal y fraccion de tiempo en cada uno.
+
+    Divide el rango de marea [-A, +A] en bandas de anchura multiplo de dz
+    (como mucho `niveles_max` bandas) y devuelve [(desplazamiento en indices
+    del perfil, fraccion de tiempo)], con desplazamiento positivo = nivel mas
+    alto que el medio. Para w(t) = A sin(2 pi t / T), la fraccion de tiempo con
+    el agua entre z1 y z2 es (asin(z2/A) - asin(z1/A)) / pi.
+    """
+    if amplitud <= 0:
+        return [(0, 1.0)]
+    pasos = max(1, int(round(2 * amplitud / dz)))
+    k = max(1, math.ceil(pasos / max(1, niveles_max - 1)))
+    h = k * dz
+    n = int(round(amplitud / h))
+    out = []
+    for b in range(-n, n + 1):
+        z1 = max(-1.0, min(1.0, (b * h - h / 2) / amplitud))
+        z2 = max(-1.0, min(1.0, (b * h + h / 2) / amplitud))
+        fr = (math.asin(z2) - math.asin(z1)) / math.pi
+        if fr > 0:
+            out.append((b * k, fr))
+    total = sum(fr for _, fr in out)
+    return [(d, fr / total) for d, fr in out]
+
+
 NIVEL_ESTACIONAL_TESIS = {"spring": 0.4, "summer": 0.3, "fall": 0.0, "winter": 0.0}
 
 
 def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
-        estabilidad=None):
+        estabilidad=None, mar=None):
     """Ejecuta el modelo con el data.dat de ``workdir``.
 
     progress:   funcion opcional progress(Tglob, tsim); si devuelve False se
@@ -646,6 +690,16 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
                                cada paso rompe el circulo inestable mas
                                profundo, como describe la tesis) o "minimo"
                                (el de menor FS).
+    mar:        None (por defecto) = lago, como el original. Si es un
+                diccionario, modo MAR (adaptacion, no esta en el original):
+                  "amplitud":      amplitud de la marea sinusoidal (m);
+                  "subida_mm_ano": subida del nivel medio del mar (mm/ano);
+                  "niveles":       numero maximo de niveles de marea.
+                En modo mar no hay meses de hielo (se calculan los 12 meses con
+                el oleaje de su estacion), la erosion de cada ola se reparte
+                entre los niveles de la marea segun el tiempo que el agua pasa
+                en cada uno, y el nivel medio sube con el tiempo. Por defecto el
+                oleaje es SEASONS_MAR (Holderness, tesis cap. 9).
     """
     np.seterr(all="ignore")   # la configuracion de NumPy es por hilo
     tic = time.process_time()
@@ -675,6 +729,20 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
     roturanotch = g["roturanotch"]; zerolevel = g["zerolevel"]; TL = g["TL"]
     P_inicial = P.copy()
     controllevel = TL
+    if mar is not None:
+        _bandas = bandas_marea(float(mar.get("amplitud", MAR_TESIS["amplitud"])), float(Dz),
+                               int(mar.get("niveles", MAR_TESIS["niveles"])))
+        _subida = float(mar.get("subida_mm_ano", MAR_TESIS["subida_mm_ano"]))
+        _tab = seasons if seasons is not None else SEASONS_MAR
+        _tmax = max([float(t) for v in _tab.values() for t in v[1]] + [0.0])
+        _db = fix(F64(f32(1.56) * _tmax ** 2 / 2) / Dz)
+        _arriba = max(d for d, _ in _bandas) + int(_subida / 1000 * (tsim / 12) / float(Dz)) + 1
+        _abajo = -min(d for d, _ in _bandas)
+        if TL - _arriba < 2 or TL + _abajo + _db > N:
+            raise ValueError(
+                "El perfil no abarca el rango de la marea: debe llegar al menos "
+                f"{(_abajo + _db) * float(Dz):.1f} m por debajo del nivel medio y "
+                f"{_arriba * float(Dz):.1f} m por encima.")
 
     jdibujo = 1
     DimDiby = idiv(tsim, Tdib)
@@ -720,6 +788,13 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
     if nreb < 1:
         raise ValueError("el numero de rebanadas debe ser >= 1")
     MAX_ROTURAS_MES = 50   # salvaguarda para los criterios "profunda" y "minimo"
+    modo_mar = mar is not None
+    if modo_mar:
+        if seasons is None:
+            seasons = SEASONS_MAR
+        amp_marea = float(mar.get("amplitud", MAR_TESIS["amplitud"]))
+        subida_mar = float(mar.get("subida_mm_ano", MAR_TESIS["subida_mm_ano"]))
+        bandas = bandas_marea(amp_marea, float(Dz), int(mar.get("niveles", MAR_TESIS["niveles"])))
     ciclo = 0
     Dprot = F64(0); Pmonth = 0; Drem = F64(0)
     parametrorotura = 0
@@ -735,7 +810,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
 
     # Variables que en Fortran conservan su valor entre iteraciones
     WBD = F64(0); HB = F64(0); Uo = F64(0); LL = F64(0)
-    Playa = 0; DC = 0; BD = 0
+    Playa = 0; DC = 0; BD = 0; DB = 0
     XDistPcirc2 = F64(0); YDistPcirc2 = F64(0); PtocorteCirc2 = 0
     YPtomedio = F64(0); DistPcirc2 = F64(0)
     CXc = F64(0); CYc = F64(0); radio = F64(0)
@@ -769,6 +844,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
     trec = []      # filas de timerecesion.out
     roturas = []   # (mes, volumen, perfil antes, perfil despues)
     roturas_fs = []      # factor de seguridad del circulo de cada rotura
+    vuelcos = []         # (mes, volumen, perfil antes, perfil despues)
     n_fs_fallidos = 0    # circulos con FS < 1.5 en los que Spencer no converge (se usa Bishop)
     primer_paso = None   # (mes, perfil) al final del primer mes calculado
     meses_calc = []      # meses en los que se calcula erosion
@@ -820,7 +896,12 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
             raise Cancelled()
         goto = 1001
 
-        if invierno == 1:
+        if modo_mar:
+            # oleaje de la estacion del calendario (no hay meses de hielo)
+            Waves, H, T, L, WF, Wn = set_waves(ESTACION_DEL_MES[(Tglob - 1) % 12], seasons)
+            mar_sin_oleaje = not np.any(T[1:] > 0)
+
+        if invierno == 1 and not modo_mar:
             t_inv = Tglob
             salto = salto + counter
             if Tglob == 3 * (salto - 2) + 1:
@@ -851,6 +932,11 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
                 end_sim = True
                 break
             goto = 1001
+        elif modo_mar and mar_sin_oleaje:
+            # estacion sin oleaje: como el invierno del lago, el mes se salta
+            meses_invierno.append(Tglob)
+            record(Tglob)
+            goto = 1001
         else:
             # ------------------------------------------------------------
             # EROSION - Trenhaile (2009)
@@ -861,268 +947,286 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
             aux5 = P[2].copy()
             Ey = F64(0)
 
-            for i in range(1, Waves + 1):
-                # Altura de ola en asomeramiento
-                DA = L[i] / 2
-                DB = fix(DA / Dz)
-                DC = TL + DB
-                WH = np.zeros(N + 1, dtype=F64)
+            if modo_mar:
+                # nivel medio del mar (sube con el tiempo) y niveles de la marea
+                TL = controllevel - int(subida_mar / 1000.0 * (Tglob / 12.0) / float(Dz))
+                niveles_mes = [(TL - d, fr) for d, fr in bandas]
+            else:
+                niveles_mes = [(TL, 1.0)]
+            TL_ref = TL
+            ey_niveles = []
+            for TL, f_marea in niveles_mes:
+                Ey = F64(0)
+                for i in range(1, Waves + 1):
+                    # Altura de ola en asomeramiento
+                    DA = L[i] / 2
+                    DB = fix(DA / Dz)
+                    DC = TL + DB
+                    WH = np.zeros(N + 1, dtype=F64)
 
-                for j in range(DC, TL - 1, -1):
-                    hL = (j - TL) * Dz / L[i]
-                    goto62 = False
-                    if hL > 0.25:
-                        LL = L[i]
-                        WH[j] = H[i]
-                        goto62 = True
-                    elif hL <= 0.25 and hL > C005:
-                        DD = (exp(2 * pi * hL) - exp(-2 * pi * hL)) / (exp(2 * pi * hL) + exp(-2 * pi * hL))
-                        LL = L[i] * sqrt(DD)
-                    elif hL <= C005:
-                        LL = T[i] * sqrt(G * (j - TL) * Dz)
-                    if not goto62:
-                        OO = 2 * 2 * pi * (j - TL) * Dz / LL
-                        NN = (exp(OO) - exp(-OO)) / 2
-                        n = F64(0.5) * (1 + (OO / NN))
-                        if hL <= 0.25 and hL > C005:
-                            xx = TWO_314 * (j - TL) * Dz / LL
-                            DD1 = (exp(xx) - exp(-xx)) / (exp(xx) + exp(-xx))
-                            WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * (G * T[i] * DD1 / TWO_314)))
+                    for j in range(DC, TL - 1, -1):
+                        hL = (j - TL) * Dz / L[i]
+                        goto62 = False
+                        if hL > 0.25:
+                            LL = L[i]
+                            WH[j] = H[i]
+                            goto62 = True
+                        elif hL <= 0.25 and hL > C005:
+                            DD = (exp(2 * pi * hL) - exp(-2 * pi * hL)) / (exp(2 * pi * hL) + exp(-2 * pi * hL))
+                            LL = L[i] * sqrt(DD)
                         elif hL <= C005:
-                            WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * sqrt(G * (j - TL) * Dz)))
-                    # 62
-                    if WH[j] >= (j - TL) * Dz / C128:
-                        WBD = int(WH[j] * C128 * F64(10.0)) / F64(10.0)
-                        HB = WH[j]
-                        break
-                # 63: longitud de la zona de rompientes
-                BD = fix(WBD / Dz) + TL
-                SZ = P[2, BD] - P[2, TL]
+                            LL = T[i] * sqrt(G * (j - TL) * Dz)
+                        if not goto62:
+                            OO = 2 * 2 * pi * (j - TL) * Dz / LL
+                            NN = (exp(OO) - exp(-OO)) / 2
+                            n = F64(0.5) * (1 + (OO / NN))
+                            if hL <= 0.25 and hL > C005:
+                                xx = TWO_314 * (j - TL) * Dz / LL
+                                DD1 = (exp(xx) - exp(-xx)) / (exp(xx) + exp(-xx))
+                                WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * (G * T[i] * DD1 / TWO_314)))
+                            elif hL <= C005:
+                                WH[j] = H[i] * sqrt(L[i] / (2 * T[i] * n * sqrt(G * (j - TL) * Dz)))
+                        # 62
+                        if WH[j] >= (j - TL) * Dz / C128:
+                            WBD = int(WH[j] * C128 * F64(10.0)) / F64(10.0)
+                            HB = WH[j]
+                            break
+                    # 63: longitud de la zona de rompientes
+                    BD = fix(WBD / Dz) + TL
+                    SZ = P[2, BD] - P[2, TL]
 
-                # Altura de ola en la zona de rompientes
-                for j in range(BD - 1, TL - 1, -1):
-                    GR = F64(0)
-                    if SZ != 0:
-                        u1 = P[2, BD] - P[2, j]
-                        u2 = P[1, BD] - P[1, j]
-                        GR = abs(u2 / u1)
-                    if P[2, j] == P[2, BD]:
-                        WH[j] = HB
+                    # Altura de ola en la zona de rompientes
+                    for j in range(BD - 1, TL - 1, -1):
+                        GR = F64(0)
+                        if SZ != 0:
+                            u1 = P[2, BD] - P[2, j]
+                            u2 = P[1, BD] - P[1, j]
+                            GR = abs(u2 / u1)
+                        if P[2, j] == P[2, BD]:
+                            WH[j] = HB
+                        else:
+                            WH[j] = HB * exp((F64(-35.2) * (abs(P[2, BD] - P[2, j])) * GR)
+                                             / (T[i] * sqrt(G * WBD)))
+
+                    # Pendiente de la playa - Sunamura (1989)
+                    VVV = HB / (SQRT_G981 * (Gs ** F64(0.5)) * T[i])
+                    BEACH[i] = atan(f32(0.12) / (VVV ** F64(0.5)))
+
+                    # Forma y volumen de la playa
+                    LimWB = anint((P[1, TL] + HB) * 10)   # REAL*8 en el original
+                    LimWBmax = LimWB / 10
+                    for j in range(1, BD + 1):
+                        aux2 = anint(P[1, j] * 10)
+                        aux2 = aux2 / 10
+                        if aux2 <= LimWBmax:
+                            break
                     else:
-                        WH[j] = HB * exp((F64(-35.2) * (abs(P[2, BD] - P[2, j])) * GR)
-                                         / (T[i] * sqrt(G * WBD)))
+                        j = BD + 1
+                    WBmax = j
 
-                # Pendiente de la playa - Sunamura (1989)
-                VVV = HB / (SQRT_G981 * (Gs ** F64(0.5)) * T[i])
-                BEACH[i] = atan(f32(0.12) / (VVV ** F64(0.5)))
-
-                # Forma y volumen de la playa
-                LimWB = anint((P[1, TL] + HB) * 10)   # REAL*8 en el original
-                LimWBmax = LimWB / 10
-                for j in range(1, BD + 1):
-                    aux2 = anint(P[1, j] * 10)
-                    aux2 = aux2 / 10
-                    if aux2 <= LimWBmax:
-                        break
-                else:
-                    j = BD + 1
-                WBmax = j
-
-                Beachpoint = 0
-                BaseBeach = 0
-                Berm = 0
-
-                if Qb == 0:
                     Beachpoint = 0
                     BaseBeach = 0
-                    Playa = 2
-                elif Qb != 0:
-                    for j in range(BD, TL - 1, -1):
-                        if P[2, j] == P[2, j - 1]:
-                            Plat = pi / 2
-                            Beachpoint = 0; BaseBeach = 0; Playa = 2
-                            continue
-                        else:
-                            Plat = atan(Dz / (P[2, j] - P[2, j - 1]))
-                        HWB = abs(P[1, WBmax] - P[1, j])
-                        DWB = abs(P[2, WBmax] - P[2, j])
-                        if BEACH[i] <= Plat:
-                            Beachpoint = 0; BaseBeach = 0; Playa = 2
-                            continue
-
-                        Inter = 2
-                        for k in range(j - 1, WBmax, -1):
-                            u1 = P[2, k - 1] - P[2, k]
-                            u2 = P[1, k - 1] - P[1, k]
-                            mcliff = F64(0) if u1 == 0 else u2 / u1
-                            mbeach = -atan(BEACH[i])
-                            Yc = (((P[1, k] - mcliff * P[2, k]) - (P[1, j] - mbeach * P[2, j]))
-                                  / (mbeach - mcliff))
-                            Zc = mbeach * Yc + P[1, j] - mbeach * P[2, j]
-                            if mcliff == 0:
-                                lam = (Zc - P[1, k]) / u2
-                            else:
-                                lam = (Yc - P[2, k]) / u1
-                            if lam >= 0.0 and lam < 1.0:
-                                Inter = k
-                                break
-                            elif lam == 1.0:
-                                Inter = k - 1
-                                break
-
-                        if (BEACH[i] * DWB < HWB) or (P[1, Inter] < P[1, WBmax]):
-                            BE = P[2, Inter]
-                            HWB = abs(P[1, Inter] - P[1, j])
-                            DWB = abs(P[2, Inter] - P[2, j])
-                            Beachpoint = Inter
-                        elif (BEACH[i] * DWB == HWB) or (P[1, Inter] == P[1, WBmax]):
-                            Beachpoint = WBmax
-                            BE = P[2, WBmax]
-                        elif (BEACH[i] * DWB > HWB) or (P[1, Inter] > P[1, WBmax]):
-                            Beachpoint = WBmax
-                            BE = P[2, j] - (HWB / tan(BEACH[i]))
-                            Berm = 1
-
-                        # Volumen
-                        a = DWB * HWB
-                        b = F64(0.5) * HWB * (P[2, j] - BE)
-                        e = F64(0.5) * Dz * abs(P[2, j - 1] - P[2, j])
-                        TB = F64(0)
-                        CT = 0
-                        M = 0
-                        for k in range(j - 1, Beachpoint, -1):
-                            if k < (M - 1):
-                                continue
-                            elif k == (M - 1):
-                                M = 0
-                            elif P[2, k] == P[2, k - 1]:
-                                jump29 = False
-                                for M in range(k + 1, Beachpoint - 1, -1):
-                                    if P[2, M] != P[2, k]:
-                                        jump29 = True
-                                        break
-                                    else:
-                                        CT = M
-                                else:
-                                    M = Beachpoint - 1
-                                if not jump29:
-                                    continue
-                            # 29
-                            BX = (F64(0.5) * Dz * abs(P[2, k] - P[2, k - 1])
-                                  + (j - k) * Dz * abs(P[2, k] - P[2, k - 1]))
-                            TB = TB + BX
-
-                        TOTAL = a - (b + e + TB)
-                        BaseBeach = j
-                        Playa = 1
-                        if Qb >= TOTAL:
-                            break
-                        elif Qb < TOTAL:
-                            Berm = 0
-                # 30
-                if BaseBeach == Beachpoint + 1:
-                    Playa = 2
                     Berm = 0
 
-                # Numero de olas de cada tipo
-                No = Wn[i] * (WF[i] / 100) * 24 * (30 - Dprot)
+                    if Qb == 0:
+                        Beachpoint = 0
+                        BaseBeach = 0
+                        Playa = 2
+                    elif Qb != 0:
+                        for j in range(BD, TL - 1, -1):
+                            if P[2, j] == P[2, j - 1]:
+                                Plat = pi / 2
+                                Beachpoint = 0; BaseBeach = 0; Playa = 2
+                                continue
+                            else:
+                                Plat = atan(Dz / (P[2, j] - P[2, j - 1]))
+                            HWB = abs(P[1, WBmax] - P[1, j])
+                            DWB = abs(P[2, WBmax] - P[2, j])
+                            if BEACH[i] <= Plat:
+                                Beachpoint = 0; BaseBeach = 0; Playa = 2
+                                continue
 
-                ER = np.zeros(N + 1, dtype=F64)
-                Runup = np.zeros(N + 1, dtype=F64)
+                            Inter = 2
+                            for k in range(j - 1, WBmax, -1):
+                                u1 = P[2, k - 1] - P[2, k]
+                                u2 = P[1, k - 1] - P[1, k]
+                                mcliff = F64(0) if u1 == 0 else u2 / u1
+                                mbeach = -atan(BEACH[i])
+                                Yc = (((P[1, k] - mcliff * P[2, k]) - (P[1, j] - mbeach * P[2, j]))
+                                      / (mbeach - mcliff))
+                                Zc = mbeach * Yc + P[1, j] - mbeach * P[2, j]
+                                if mcliff == 0:
+                                    lam = (Zc - P[1, k]) / u2
+                                else:
+                                    lam = (Yc - P[2, k]) / u1
+                                if lam >= 0.0 and lam < 1.0:
+                                    Inter = k
+                                    break
+                                elif lam == 1.0:
+                                    Inter = k - 1
+                                    break
 
-                # Erosion por esfuerzo cortante
-                Fw = f32(0.0034)
-                for j in range(DC, TL, -1):
-                    Su = F64(0)
-                    Sd = F64(0)
-                    hL = (j - TL) * Dz / L[i]
-                    if hL > 0.25:
-                        ER[j] = 0
-                        continue
-                    elif hL <= 0.25 and hL > C005:
-                        if j > BD:
-                            XX = TWO_31416 * (j - TL) * Dz / L[i]
-                            YY = (exp(XX) - exp(-XX)) / (exp(XX) + exp(-XX))
-                            Lb = L[i] * sqrt(YY)
+                            if (BEACH[i] * DWB < HWB) or (P[1, Inter] < P[1, WBmax]):
+                                BE = P[2, Inter]
+                                HWB = abs(P[1, Inter] - P[1, j])
+                                DWB = abs(P[2, Inter] - P[2, j])
+                                Beachpoint = Inter
+                            elif (BEACH[i] * DWB == HWB) or (P[1, Inter] == P[1, WBmax]):
+                                Beachpoint = WBmax
+                                BE = P[2, WBmax]
+                            elif (BEACH[i] * DWB > HWB) or (P[1, Inter] > P[1, WBmax]):
+                                Beachpoint = WBmax
+                                BE = P[2, j] - (HWB / tan(BEACH[i]))
+                                Berm = 1
+
+                            # Volumen
+                            a = DWB * HWB
+                            b = F64(0.5) * HWB * (P[2, j] - BE)
+                            e = F64(0.5) * Dz * abs(P[2, j - 1] - P[2, j])
+                            TB = F64(0)
+                            CT = 0
+                            M = 0
+                            for k in range(j - 1, Beachpoint, -1):
+                                if k < (M - 1):
+                                    continue
+                                elif k == (M - 1):
+                                    M = 0
+                                elif P[2, k] == P[2, k - 1]:
+                                    jump29 = False
+                                    for M in range(k + 1, Beachpoint - 1, -1):
+                                        if P[2, M] != P[2, k]:
+                                            jump29 = True
+                                            break
+                                        else:
+                                            CT = M
+                                    else:
+                                        M = Beachpoint - 1
+                                    if not jump29:
+                                        continue
+                                # 29
+                                BX = (F64(0.5) * Dz * abs(P[2, k] - P[2, k - 1])
+                                      + (j - k) * Dz * abs(P[2, k] - P[2, k - 1]))
+                                TB = TB + BX
+
+                            TOTAL = a - (b + e + TB)
+                            BaseBeach = j
+                            Playa = 1
+                            if Qb >= TOTAL:
+                                break
+                            elif Qb < TOTAL:
+                                Berm = 0
+                    # 30
+                    if BaseBeach == Beachpoint + 1:
+                        Playa = 2
+                        Berm = 0
+
+                    # Numero de olas de cada tipo
+                    No = Wn[i] * (WF[i] / 100) * 24 * (30 - Dprot)
+                    if modo_mar:
+                        No = No * f_marea   # tiempo que el agua pasa en este nivel
+
+                    ER = np.zeros(N + 1, dtype=F64)
+                    Runup = np.zeros(N + 1, dtype=F64)
+
+                    # Erosion por esfuerzo cortante
+                    Fw = f32(0.0034)
+                    for j in range(DC, TL, -1):
+                        Su = F64(0)
+                        Sd = F64(0)
+                        hL = (j - TL) * Dz / L[i]
+                        if hL > 0.25:
+                            ER[j] = 0
+                            continue
+                        elif hL <= 0.25 and hL > C005:
+                            if j > BD:
+                                XX = TWO_31416 * (j - TL) * Dz / L[i]
+                                YY = (exp(XX) - exp(-XX)) / (exp(XX) + exp(-XX))
+                                Lb = L[i] * sqrt(YY)
+                                HH = FOUR_31416 * (j - TL) * Dz / Lb
+                                II = (exp(HH) - exp(-HH)) / 2
+                                Sd = C3_1416 * (WH[j] ** 2) / (4 * Lb * II)
+                                GG = TWO_31416 * ((j - TL) * Dz - Sd) / Lb
+                                EE = (exp(GG) - exp(-GG)) / 2
+                                Uo = C3_1416 * WH[j] / (T[i] * EE)
+                        elif hL <= C005:
+                            Lb = T[i] * sqrt(G * (j - TL) * Dz)
                             HH = FOUR_31416 * (j - TL) * Dz / Lb
                             II = (exp(HH) - exp(-HH)) / 2
                             Sd = C3_1416 * (WH[j] ** 2) / (4 * Lb * II)
-                            GG = TWO_31416 * ((j - TL) * Dz - Sd) / Lb
-                            EE = (exp(GG) - exp(-GG)) / 2
-                            Uo = C3_1416 * WH[j] / (T[i] * EE)
-                    elif hL <= C005:
-                        Lb = T[i] * sqrt(G * (j - TL) * Dz)
-                        HH = FOUR_31416 * (j - TL) * Dz / Lb
-                        II = (exp(HH) - exp(-HH)) / 2
-                        Sd = C3_1416 * (WH[j] ** 2) / (4 * Lb * II)
-                        Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz - Sd))
+                            Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz - Sd))
 
-                    if j < BD and P[2, j] < P[2, BD]:
-                        Su = F64(0.185767) * (WBD / SZ) * (P[2, BD] - P[2, j])
-                        Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz + Su))
-                    elif j < BD and P[2, j] == P[2, BD]:
-                        Su = F64(0)
-                        Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz))
+                        if j < BD and P[2, j] < P[2, BD]:
+                            Su = F64(0.185767) * (WBD / SZ) * (P[2, BD] - P[2, j])
+                            Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz + Su))
+                        elif j < BD and P[2, j] == P[2, BD]:
+                            Su = F64(0)
+                            Uo = (WH[j] / 2) * sqrt(G / ((j - TL) * Dz))
 
-                    def shear():
-                        SS = (1 / F64(2.0)) * Fw * seawater * (Uo ** 2)
-                        return No * Kss * ((SS - SFmin) ** p)
+                        def shear():
+                            SS = (1 / F64(2.0)) * Fw * seawater * (Uo ** 2)
+                            return No * Kss * ((SS - SFmin) ** p)
 
+                        if Playa == 1:
+                            if TL < Beachpoint:
+                                if j <= DC and j >= BaseBeach:
+                                    ER[j] = shear()
+                                elif j < Beachpoint and j > TL:
+                                    ER[j] = shear()
+                            elif TL >= Beachpoint:
+                                if j <= DC and j >= BaseBeach:
+                                    ER[j] = shear()
+                        elif Playa == 2:
+                            if j > TL:
+                                ER[j] = shear()
+
+                    # Erosion por impacto del oleaje + run-up
+                    skip32 = False
                     if Playa == 1:
-                        if TL < Beachpoint:
-                            if j <= DC and j >= BaseBeach:
-                                ER[j] = shear()
-                            elif j < Beachpoint and j > TL:
-                                ER[j] = shear()
-                        elif TL >= Beachpoint:
-                            if j <= DC and j >= BaseBeach:
-                                ER[j] = shear()
-                    elif Playa == 2:
-                        if j > TL:
-                            ER[j] = shear()
-
-                # Erosion por impacto del oleaje + run-up
-                skip32 = False
-                if Playa == 1:
-                    aux2 = anint(P[1, Beachpoint] * 10)
-                    aux2 = aux2 / 10
-                    if aux2 >= LimWBmax:
-                        Runup[Beachpoint] = 0
-                    elif aux2 < LimWBmax:
-                        Rs = (LimWBmax - P[1, Beachpoint]) / tan(BEACH[i])
-                        Runup[Beachpoint] = No * Cb * Bmat * (KRs * Rs - Rsc)
-                    if TL > Beachpoint and TL < BaseBeach:
-                        Ey = Ey + 0
-                        skip32 = True
-                    elif TL <= Beachpoint:
-                        Runup[Beachpoint] = 0
-                        if Berm == 1:
+                        aux2 = anint(P[1, Beachpoint] * 10)
+                        aux2 = aux2 / 10
+                        if aux2 >= LimWBmax:
+                            Runup[Beachpoint] = 0
+                        elif aux2 < LimWBmax:
+                            Rs = (LimWBmax - P[1, Beachpoint]) / tan(BEACH[i])
+                            Runup[Beachpoint] = No * Cb * Bmat * (KRs * Rs - Rsc)
+                        if TL > Beachpoint and TL < BaseBeach:
                             Ey = Ey + 0
                             skip32 = True
-                elif Playa == 2:
-                    Runup[roturanotch] = 0
-                if not skip32:
-                    if SZ == 0:
-                        Fb = f32(512.61) * (HB / f32(0.78))
-                    else:
-                        Fb = f32(512.61) * (HB / f32(0.78)) * exp(-(SZ * f32(0.05)))
-                    Energy = No * MMM * (Fb - WFmin)
-                    if Energy < 0:
-                        Energy = F64(0)
-                    Ey = Ey + Energy
-                # 32: valores acumulados
-                for j in range(1, N + 1):
-                    if ER[j] <= 0:
-                        ER[j] = 0
-                    if Runup[j] <= 0:
-                        Runup[j] = 0
-                    TER[j] = TER[j] + ER[j]
-                    TRunup[j] = TRunup[j] + Runup[j]
+                        elif TL <= Beachpoint:
+                            Runup[Beachpoint] = 0
+                            if Berm == 1:
+                                Ey = Ey + 0
+                                skip32 = True
+                    elif Playa == 2:
+                        Runup[roturanotch] = 0
+                    if not skip32:
+                        if SZ == 0:
+                            Fb = f32(512.61) * (HB / f32(0.78))
+                        else:
+                            Fb = f32(512.61) * (HB / f32(0.78)) * exp(-(SZ * f32(0.05)))
+                        Energy = No * MMM * (Fb - WFmin)
+                        if Energy < 0:
+                            Energy = F64(0)
+                        Ey = Ey + Energy
+                    # 32: valores acumulados
+                    for j in range(1, N + 1):
+                        if ER[j] <= 0:
+                            ER[j] = 0
+                        if Runup[j] <= 0:
+                            Runup[j] = 0
+                        TER[j] = TER[j] + ER[j]
+                        TRunup[j] = TRunup[j] + Runup[j]
+
+                ey_niveles.append((TL, Ey))
+            TL = TL_ref
+            if modo_mar:
+                DC = TL + DB
 
             # Nuevas posiciones tras la erosion
             for j in range(1, N + 1):
                 P[2, j] = P[2, j] - TER[j] - TRunup[j]
-            P[2, TL] = P[2, TL] - Ey
+            for tl_, ey_ in ey_niveles:
+                P[2, tl_] = P[2, tl_] - ey_
 
             # --------------------------------------------------------
             # Puntos criticos
@@ -1575,9 +1679,12 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
                     Lcdg = abs(P[2, roturanotch]) - CoordX
                     Sigmatensilemax = (F64(6.0) * sumaacumuladarot * Lcdg) / (hrot ** 2)
                     if Sigmatensilemax >= Sigmatensilerock:
+                        antes_v = P[2, 1:N + 1].astype(float)
                         for ii in range(Ptocorte, roturanotch + 1):
                             P[2, ii] = vvr[ii]
                         volacumulado = volacumulado2
+                        vuelcos.append((Tglob, float(volacumulado2), antes_v,
+                                        P[2, 1:N + 1].astype(float)))
                     elif Sigmatensilemax < Sigmatensilerock:
                         volacumulado = F64(0)
             # 54
@@ -1599,7 +1706,21 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
                 Dprot = abs(Pmonth * 30 - Drem)
 
             # Estacion del ano
-            if Pmonth == 0:
+            if modo_mar:
+                # modo mar: calendario fijo; solo el salto por derrubios
+                if Pmonth != 0:
+                    Draw = Tglob
+                    Tglob = Tglob + Pmonth
+                    meses_derrubios.extend(range(Draw + 1, min(Tglob, tsim) + 1))
+                    if Tglob >= tsim:
+                        for jt in range(Draw, tsim + 1):
+                            record(jt)
+                        end_sim = True
+                        break
+                    for jt in range(Draw, Tglob + 1):
+                        record(jt)
+                goto = 1001
+            elif Pmonth == 0:
                 if changelakelevel == 1:
                     change_level_exact(Tglob)
                 if Tglob == 3 * salto:
@@ -1705,6 +1826,10 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
         "timerecesion": trec,
         "roturas": roturas,
         "roturas_fs": roturas_fs,
+        "vuelcos": vuelcos,
+        "modo": "mar" if modo_mar else "lago",
+        "mar": (dict(amplitud=amp_marea, subida_mm_ano=subida_mar, bandas=bandas)
+                if modo_mar else None),
         "estabilidad": dict(metodo=metodo, rebanadas=(nreb if estabilidad else 5),
                             criterio=criterio, no_convergidos=n_fs_fallidos),
         "primer_paso": primer_paso,
@@ -1735,6 +1860,12 @@ if __name__ == "__main__":
                     help="numero de rebanadas (original: 5)")
     ap.add_argument("--criterio", choices=CRITERIOS_ROTURA, default="todas",
                     help="criterio de rotura (original: todas)")
+    ap.add_argument("--mar", action="store_true",
+                    help="modo mar: marea, sin hielo y subida del nivel del mar")
+    ap.add_argument("--amplitud-marea", type=float, default=MAR_TESIS["amplitud"],
+                    help="amplitud de la marea en m (modo mar; tesis Holderness: 3)")
+    ap.add_argument("--subida-mar", type=float, default=MAR_TESIS["subida_mm_ano"],
+                    help="subida del nivel del mar en mm/ano (modo mar; tesis: 6)")
     a = ap.parse_args()
     nl = None
     if a.nivel_estacional or a.nivel_interanual:
@@ -1743,4 +1874,5 @@ if __name__ == "__main__":
     est = None
     if (a.metodo, a.rebanadas, a.criterio) != ("fellenius", 5, "todas"):
         est = {"metodo": a.metodo, "rebanadas": a.rebanadas, "criterio": a.criterio}
-    run(a.directorio, nivel_lago=nl, estabilidad=est)
+    mr = ({"amplitud": a.amplitud_marea, "subida_mm_ano": a.subida_mar} if a.mar else None)
+    run(a.directorio, nivel_lago=nl, estabilidad=est, mar=mr)

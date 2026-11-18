@@ -14,11 +14,13 @@ marea (lago Erie), de R. Castedo (UPM). La tesis doctoral relacionada está en
 | `great_lake_gui.py` | Herramienta gráfica de escritorio sobre `great_lake_motor.py`. |
 | `ejemplos/caso_base/data.dat` | Caso base: 1260 meses, sin playa, terreno saturado, un estrato. |
 | `ejemplos/caso_simple/data.dat` | Caso simple y realista: acantilado de 10 m a 45° (estable al inicio), 20 años, playa pequeña, nivel freático, dos estratos y un punto de estudio. Parámetros dentro de los rangos de la tesis (cap. 10). |
+| `ejemplos/caso_mar/` | Caso marino tipo Holderness (modo mar de la herramienta): till de 15 m a 45°, marea ±3 m, subida del nivel del mar 6 mm/año. Incluye `data.herramienta.json`, que abre la herramienta en modo mar. |
 | `ejemplos/caso_extremo/data.dat` | Caso de comprobación con parámetros desfavorables (fuera de los rangos de la tesis). Retrocede muy rápido, pero ejercita todas las partes del código. |
 | `tools/restore_fortran.py` | Adapta el `.f90` para compilarlo con gfortran (cambios mínimos de sintaxis). |
 | `tools/compare_outputs.py` | Compara valor a valor las salidas de ambas versiones. |
 | `tools/verify.sh` | Compila el Fortran y comprueba que Fortran = `great_lake.py` = `great_lake_motor.py` (opciones por defecto). |
 | `tools/test_estabilidad.py` | Pruebas de los métodos de estabilidad (Fellenius, Bishop, Spencer). |
+| `tools/test_mar.py` | Pruebas del modo mar y de los vuelcos. |
 
 ## Uso de la versión en Python
 
@@ -41,6 +43,37 @@ Todas están desactivadas por defecto, y entonces da exactamente lo mismo que
 ```bash
 python great_lake_motor.py ejemplos/caso_simple --metodo bishop --rebanadas 20 --criterio profunda --nivel-estacional --nivel-interanual
 ```
+
+### Modo mar (`--mar`)
+
+El modelo original es para lagos sin marea. El modo mar lo adapta a costas
+marinas con tres cambios:
+
+- **Marea sinusoidal** de amplitud A: el rango [−A, +A] se divide en niveles.
+  En cada nivel actúa el oleaje del mes, con un número de olas proporcional al
+  tiempo que el agua pasa en él: (asen(z₂/A) − asen(z₁/A))/π. Así la erosión
+  se reparte en altura, en lugar de concentrarse en una sola cota.
+- **Sin hielo**: se calculan los 12 meses, cada uno con el oleaje de su
+  estación.
+- **Subida del nivel medio del mar** (mm/año).
+
+Valores por defecto basados en Holderness (tesis, cap. 9): A = 3 m y subida
+de 6 mm/año. El oleaje por defecto es una distribución ilustrativa cuya altura
+media (≈1 m) coincide con la de la boya de Hornsea; conviene sustituirlo por
+datos reales.
+
+No existe un Fortran marino con el que comparar. Se comprueba con
+`tools/test_mar.py`: con A = 0, sin subida y el oleaje del lago, el modo mar
+reproduce exactamente el modo lago. Esa prueba incluye los saltos por
+derrubios.
+
+```bash
+python great_lake_motor.py ejemplos/caso_mar --mar --amplitud-marea 3 --subida-mar 6
+```
+
+En `caso_mar`, la cara del acantilado retrocede del orden de 1 m/año (unos 10–13 m
+en 10 años entre 4 y 14 m de cota). Holderness retrocede de media 1,55 m/año
+según la tesis. Los parámetros no están calibrados para ese sitio.
 
 ### Nivel del lago variable
 
@@ -103,6 +136,24 @@ python great_lake_gui.py ejemplos/caso_simple/data.dat
 ```
 
 ![Herramienta gráfica con el caso base](docs/captura_gui.png)
+
+**Lago / mar**: el botón de arriba a la izquierda (LAGO ▾ / MAR ▾) cambia de
+modo. En modo mar, la pestaña *Nivel / mareas* tiene la amplitud de la marea,
+la subida del nivel del mar y el número de niveles de marea, y la vista
+muestra la franja entre bajamar y pleamar. Al guardar, las opciones de la
+herramienta (modo, marea, estabilidad, oleaje…) se escriben en
+`data.herramienta.json`, junto al `data.dat`, y se recuperan al abrirlo.
+
+**Roturas**: la pestaña *Roturas* y la línea temporal muestran los dos tipos de
+rotura del modelo:
+
+- **Deslizamientos circulares**: una masa que resbala por una superficie curva
+  desde el pie del acantilado. En rojo.
+- **Vuelcos**: un bloque descalzado por la muesca que excava el oleaje en la
+  base, que cae cuando su peso supera la resistencia a tracción del terreno.
+  En ámbar.
+
+![Modo mar](docs/captura_modo_mar.png)
 
 Si se abre sin indicar ningún `data.dat`, la herramienta carga el caso simple
 realista (el mismo que `ejemplos/caso_simple`) como plantilla.

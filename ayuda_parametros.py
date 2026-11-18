@@ -189,6 +189,65 @@ AYUDA = {
         "comas o punto y coma. Las líneas que no son numéricas, como las cabeceras, se "
         "ignoran.",
     ),
+    # ------------------------------------------------------------ modo / mar
+    "modo": (
+        "Elige si el acantilado da a un lago (sin marea) o al mar (con marea).",
+        "<b>Lago</b>: es el modelo original (Great_lake, cap. 10 de la tesis), para lagos "
+        "sin marea como el Erie. El nivel del agua es fijo y en invierno el hielo "
+        "impide el oleaje. Con las opciones por defecto da los mismos resultados que el "
+        "Fortran.<br>"
+        "<b>Mar</b>: es una adaptación de la herramienta. Mantiene el mismo modelo de "
+        "erosión y de roturas, pero añade una marea sinusoidal: el oleaje actúa en cada "
+        "nivel de la marea según el tiempo que el agua pasa en él, y la erosión se reparte "
+        "en altura. Además se calculan los 12 meses (no hay hielo) y el nivel medio del mar "
+        "puede subir. Los valores por defecto se basan en la costa de Holderness (Reino "
+        "Unido), estudiada en el cap. 9 de la tesis.<br><br>"
+        "Las opciones de cada modo se guardan junto al data.dat, en el fichero "
+        "<i>data.herramienta.json</i>.",
+    ),
+    "mar_amplitud": (
+        "Cuánto sube y baja el mar con la marea respecto al nivel medio (la mitad de la "
+        "diferencia entre pleamar y bajamar).",
+        "Marea sinusoidal w(t) = A·sen(2πt/T). El rango [−A, +A] se divide en niveles y la "
+        "fracción de tiempo que el agua pasa en cada uno es (asen(z₂/A) − asen(z₁/A))/π: "
+        "el agua pasa más tiempo cerca de la pleamar y la bajamar que en el nivel medio. "
+        "El oleaje de cada mes se reparte entre los niveles según esas fracciones.<br><br>"
+        "Holderness (tesis): A = 3 m, periodo 12,46 h. Con A = 0, sin subida del nivel y "
+        "con el oleaje del lago, el modo mar reproduce exactamente el modo lago.",
+    ),
+    "mar_subida": (
+        "Cuánto sube el nivel medio del mar cada año (milímetros por año).",
+        "El nivel medio se desplaza hacia arriba con el tiempo; el desplazamiento se aplica "
+        "en saltos de Δz (con Δz = 0,1 m y 6 mm/año, un salto cada ~17 años). Tesis, "
+        "Holderness: 6 mm/año de subida relativa (Eurosion, 2006). Valores negativos "
+        "representan un descenso relativo (por ejemplo, por levantamiento del terreno).",
+    ),
+    "mar_niveles": (
+        "En cuántos niveles se divide la marea para el cálculo. Más niveles = más preciso "
+        "pero más lento.",
+        "Los niveles se separan un múltiplo de Δz. Con A = 3 m y 15 niveles, cada nivel "
+        "abarca unos 0,4 m. El tiempo de cálculo crece casi en proporción al número de "
+        "niveles.",
+    ),
+    "vuelco": (
+        "Hay dos tipos de rotura: el deslizamiento (una masa que resbala por una superficie "
+        "curva) y el vuelco (un bloque que se cae porque el oleaje le ha quitado el apoyo de "
+        "abajo).",
+        "<b>Deslizamiento circular</b> (o rotacional): una masa de terreno resbala sobre una "
+        "superficie curva que sale del pie del acantilado. Se produce cuando el factor de "
+        "seguridad del círculo es menor que 1 (Fellenius, Bishop o Spencer). Deja el perfil "
+        "cóncavo típico.<br><br>"
+        "<b>Vuelco</b>: el oleaje excava una muesca o socavón en la base del acantilado. "
+        "El bloque que queda encima, en voladizo, solo se sostiene por la resistencia a "
+        "tracción del terreno en su parte trasera. El modelo corta el bloque con un plano "
+        "vertical por el fondo de la muesca, calcula su peso y su brazo de palanca, y la "
+        "tensión de tracción que produce, σ = 6·W·L/h². Si supera la resistencia a "
+        "tracción del estrato (columna «Resist. corte», 8 kPa en la tesis), el bloque cae "
+        "y la cara queda vertical.<br><br>"
+        "El vuelco solo se evalúa en los meses en que no ha habido deslizamiento. En los "
+        "dos casos, el material caído protege el pie durante un tiempo (meses en color "
+        "arena en la línea temporal).",
+    ),
     # --------------------------------------------------------- linea temporal
     "linea_temporal": (
         "Arrastra la barra para ver el perfil mes a mes. Los colores indican qué pasa "

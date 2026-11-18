@@ -23,13 +23,14 @@ Requiere: numpy, PySide6, matplotlib.
 
 import copy
 import csv
+import json
 import os
 import sys
 import time
 
 import numpy as np
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QBrush, QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QAction, QActionGroup, QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDockWidget,
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
@@ -153,12 +154,13 @@ class Worker(QObject):
     terminado = Signal(object, float)
     error = Signal(str)
 
-    def __init__(self, workdir, seasons, nivel_lago=None, estabilidad=None):
+    def __init__(self, workdir, seasons, nivel_lago=None, estabilidad=None, mar=None):
         super().__init__()
         self.workdir = workdir
         self.seasons = seasons
         self.nivel_lago = nivel_lago
         self.estabilidad = estabilidad
+        self.mar = mar
         self._cancelar = False
 
     def cancelar(self):
@@ -177,7 +179,8 @@ class Worker(QObject):
 
         try:
             res = gl.run(self.workdir, verbose=False, progress=prog, seasons=self.seasons,
-                         nivel_lago=self.nivel_lago, estabilidad=self.estabilidad)
+                         nivel_lago=self.nivel_lago, estabilidad=self.estabilidad,
+                         mar=self.mar)
             res["nivel_lago"] = self.nivel_lago
         except gl.Cancelled:
             self.error.emit("Cálculo detenido por el usuario.")
@@ -358,6 +361,7 @@ COLOR_MES_CALCULADO = "#3a414d"
 COLOR_INVIERNO = "#9cc9f0"      # azul hielo
 COLOR_DERRUBIOS = "#d9a25b"     # arena
 COLOR_ROTURA = "#ff4d4d"
+COLOR_VUELCO = "#ffb020"
 COLOR_CURSOR = "#00e5ff"
 
 
@@ -370,17 +374,22 @@ class LineaTemporal(QWidget):
         super().__init__()
         self.tsim = 0
         self.valor = 0
-        self.roturas = {}     # mes -> numero de roturas
+        self.roturas = {}     # mes -> numero de deslizamientos circulares
+        self.vuelcos = {}     # mes -> numero de vuelcos
         self.sin_calc = {}    # mes -> "invierno" | "derrubios"
+        self.texto_invierno = "invierno: lago helado, sin oleaje ni erosión"
         self.setMinimumHeight(58)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
 
-    def configurar(self, tsim, roturas, invierno, derrubios):
+    def configurar(self, tsim, roturas, invierno, derrubios, vuelcos=()):
         self.tsim = int(tsim)
         self.roturas = {}
         for m in roturas:
             self.roturas[m] = self.roturas.get(m, 0) + 1
+        self.vuelcos = {}
+        for m in vuelcos:
+            self.vuelcos[m] = self.vuelcos.get(m, 0) + 1
         self.sin_calc = {m: "invierno" for m in invierno}
         self.sin_calc.update({m: "derrubios" for m in derrubios})
         self.valor = 0
@@ -414,15 +423,18 @@ class LineaTemporal(QWidget):
             return "Mes 0: perfil inicial"
         tipo = self.sin_calc.get(mes)
         if tipo == "invierno":
-            estado = "invierno: lago helado, sin oleaje ni erosión"
+            estado = self.texto_invierno
         elif tipo == "derrubios":
             estado = "protegido por derrubios: sin erosión"
         else:
             estado = "calculado (oleaje y erosión)"
         n = self.roturas.get(mes, 0)
+        nv = self.vuelcos.get(mes, 0)
         txt = f"Mes {mes} (año {mes / 12:.2f}): {estado}"
         if n:
-            txt += f" · {n} rotura{'s' if n > 1 else ''}"
+            txt += f" · {n} deslizamiento{'s' if n > 1 else ''}"
+        if nv:
+            txt += f" · {nv} vuelco{'s' if nv > 1 else ''}"
         return txt
 
     def mouseMoveEvent(self, ev):
@@ -470,7 +482,11 @@ class LineaTemporal(QWidget):
         # parte recorrida: linea fina bajo la barra (no tapa los colores)
         p.fillRect(QRectF(x0, yb + hb + 1.5, max(0.0, self._x(self.valor) - x0), 2.5),
                    QColor(COLOR_CURSOR))
-        # roturas
+        # vuelcos (rayas cortas ambar) y deslizamientos (rayas rojas)
+        for m, n in self.vuelcos.items():
+            x = self._x(m - 0.5)
+            p.setPen(QPen(QColor(COLOR_VUELCO), 1.6))
+            p.drawLine(QPointF(x, yb - 4), QPointF(x, yb - 1))
         for m, n in self.roturas.items():
             x = self._x(m - 0.5)
             p.setPen(QPen(QColor(COLOR_ROTURA), 2 if n > 1 else 1.4))
@@ -512,6 +528,17 @@ class LineaTemporal(QWidget):
 # Ventana principal
 # ---------------------------------------------------------------------------
 class Ventana(QMainWindow):
+    @property
+    def seasons(self):
+        return self.seasons_por_modo[self.modo]
+
+    @seasons.setter
+    def seasons(self, valor):
+        self.seasons_por_modo[self.modo] = valor
+
+    def _seasons_defecto(self):
+        return gl.SEASONS if self.modo == "lago" else gl.SEASONS_MAR
+
     def __init__(self, ruta=None):
         super().__init__()
         self.setWindowTitle(APP_NAME)
@@ -522,7 +549,10 @@ class Ventana(QMainWindow):
         self.res = None
         self.res_dir = None
         self.serie_nivel = None
-        self.seasons = copy.deepcopy(gl.SEASONS)
+        self.modo = "lago"
+        self._eventos = []
+        self.seasons_por_modo = {"lago": copy.deepcopy(gl.SEASONS),
+                                 "mar": copy.deepcopy(gl.SEASONS_MAR)}
         self._bloqueo = False
         self.hilo = None
         self.worker = None
@@ -547,9 +577,21 @@ class Ventana(QMainWindow):
         lay.setSpacing(8)
 
         marca = QToolButton(objectName="brand")
-        marca.setText("GREAT LAKE")
+        marca.setText("LAGO")
         marca.setPopupMode(QToolButton.InstantPopup)
+        self.marca = marca
         menu = QMenu(marca)
+        grupo_modo = QActionGroup(self)
+        self.acciones_modo = {}
+        for clave, texto in (("lago", "Lago: sin marea (modelo Great_lake de la tesis)"),
+                             ("mar", "Mar: con marea (adaptación de la herramienta)")):
+            a = QAction(texto, self, checkable=True)
+            a.setChecked(clave == "lago")
+            a.triggered.connect(lambda _=False, c=clave: self.cambiar_modo(c))
+            grupo_modo.addAction(a)
+            menu.addAction(a)
+            self.acciones_modo[clave] = a
+        menu.addSeparator()
         for texto, fn in (("Nuevo caso", self.nuevo), ("Abrir data.dat…", self.dialogo_abrir),
                           ("Guardar data.dat", self.guardar),
                           ("Guardar como…", self.guardar_como), (None, None),
@@ -563,6 +605,7 @@ class Ventana(QMainWindow):
                 menu.addAction(a)
         marca.setMenu(menu)
         lay.addWidget(marca)
+        lay.addWidget(InfoBoton("modo"))
 
         b_abrir = QPushButton("Abrir data.dat…")
         b_abrir.clicked.connect(self.dialogo_abrir)
@@ -591,7 +634,8 @@ class Ventana(QMainWindow):
         lay.addWidget(self.cb_utdib)
         lay.addWidget(self._sep())
 
-        lay.addWidget(QLabel("Nivel del lago:"))
+        self.lb_nivel_barra = QLabel("Nivel del lago:")
+        lay.addWidget(self.lb_nivel_barra)
         self.sp_lake = QSpinBox()
         self.sp_lake.setRange(-100, 100)
         self.sp_lake.setSuffix(" m")
@@ -867,12 +911,8 @@ class Ventana(QMainWindow):
         self.cb_vel.currentIndexChanged.connect(self._velocidad)
         fila.addWidget(self.cb_vel)
         fila.addStretch(1)
-        leyenda = QLabel(
-            f'<span style="color:{COLOR_ROTURA}">┃</span> rotura &nbsp;&nbsp; '
-            f'<span style="color:{COLOR_MES_CALCULADO}; background:{COLOR_MES_CALCULADO}">'
-            f'&nbsp;&nbsp;&nbsp;</span> mes con erosión &nbsp;&nbsp; '
-            f'<span style="color:{COLOR_INVIERNO}">█</span> invierno: lago helado &nbsp;&nbsp; '
-            f'<span style="color:{COLOR_DERRUBIOS}">█</span> pie protegido por derrubios')
+        leyenda = QLabel(self._texto_leyenda())
+        self.lb_leyenda_linea = leyenda
         leyenda.setStyleSheet("color: #c3cad5; font-size: 8pt;")
         fila.addWidget(leyenda)
         fila.addWidget(InfoBoton("linea_temporal"))
@@ -904,7 +944,7 @@ class Ventana(QMainWindow):
         self.cb_grafica = QComboBox()
         self.cb_grafica.addItems(["Retroceso en el nivel del lago", "Retroceso de la cresta",
                                   "Retroceso en los puntos de estudio",
-                                  "Volumen de roturas acumulado"])
+                                  "Volumen de roturas acumulado (deslizamientos + vuelcos)"])
         self.cb_grafica.currentIndexChanged.connect(self.dibujar_grafica)
         fila.addWidget(self.cb_grafica, 1)
         v.addLayout(fila)
@@ -924,8 +964,8 @@ class Ventana(QMainWindow):
         # --- Roturas
         w = QWidget()
         v = QVBoxLayout(w)
-        self.tb_roturas = QTableWidget(0, 4)
-        self.tb_roturas.setHorizontalHeaderLabels(["Mes", "Año", "Volumen (m³/m)", "FS"])
+        self.tb_roturas = QTableWidget(0, 5)
+        self.tb_roturas.setHorizontalHeaderLabels(["Mes", "Año", "Tipo", "Volumen (m³/m)", "FS"])
         self.tb_roturas.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tb_roturas.verticalHeader().setVisible(False)
         self.tb_roturas.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -935,7 +975,10 @@ class Ventana(QMainWindow):
         nota = QLabel("Selecciona una o varias roturas para ver el perfil antes (discontinuo) "
                       "y después en la vista central.", objectName="note")
         nota.setWordWrap(True)
-        v.addWidget(nota)
+        fila_n = QHBoxLayout()
+        fila_n.addWidget(nota, 1)
+        fila_n.addWidget(etiqueta_info("Tipos de rotura", "vuelco"))
+        v.addLayout(fila_n)
         b = QPushButton("Quitar selección")
         b.clicked.connect(self.tb_roturas.clearSelection)
         v.addWidget(b)
@@ -991,6 +1034,7 @@ class Ventana(QMainWindow):
         v.addLayout(fila)
 
         g = QGroupBox("Variación del nivel del lago en el cálculo")
+        self.grp_nivel_lago = g
         gf = QVBoxLayout(g)
         self.ck_estacional = QCheckBox("Variación estacional (subida respecto al nivel del lago):")
         fe0 = QHBoxLayout()
@@ -1028,6 +1072,34 @@ class Ventana(QMainWindow):
         for ck in (self.ck_estacional, self.ck_interanual):
             ck.toggled.connect(self._cambio_opciones_nivel)
         v.addWidget(g)
+
+        gm_ = QGroupBox("Marea y nivel del mar (modo mar)")
+        self.grp_marea = gm_
+        fm = QFormLayout(gm_)
+        self.sp_amp = dspin(0, 10, 2, 0.1, "m")
+        self.sp_amp.setValue(gl.MAR_TESIS["amplitud"])
+        self.sp_subida = dspin(-50, 50, 1, 0.5, "mm/año")
+        self.sp_subida.setValue(gl.MAR_TESIS["subida_mm_ano"])
+        self.sp_nmarea = QSpinBox()
+        self.sp_nmarea.setRange(1, 81)
+        self.sp_nmarea.setValue(gl.MAR_TESIS["niveles"])
+        fm.addRow(etiqueta_info("Amplitud de la marea", "mar_amplitud"), self.sp_amp)
+        fm.addRow(etiqueta_info("Subida del nivel del mar", "mar_subida"), self.sp_subida)
+        fm.addRow(etiqueta_info("Niveles de marea", "mar_niveles"), self.sp_nmarea)
+        b = QPushButton("Valores por defecto (Holderness, tesis cap. 9)")
+        b.clicked.connect(self._mar_defecto)
+        fm.addRow("", b)
+        self.lb_aviso_mar = QLabel(
+            "El modo mar es una adaptación de la herramienta: no existe un Fortran con el "
+            "que comparar. Con amplitud 0, sin subida y el oleaje del lago reproduce "
+            "exactamente el modo lago.", objectName="note")
+        self.lb_aviso_mar.setWordWrap(True)
+        fm.addRow(self.lb_aviso_mar)
+        for w_ in (self.sp_amp, self.sp_subida):
+            w_.valueChanged.connect(self._cambio_opciones_nivel)
+        self.sp_nmarea.valueChanged.connect(self._cambio_opciones_nivel)
+        v.addWidget(gm_)
+        gm_.setVisible(False)
 
         self.graf_nivel = Lienzo()
         v.addWidget(self.graf_nivel, 1)
@@ -1156,11 +1228,15 @@ class Ventana(QMainWindow):
             Lmax = max(gl.f32(1.56) * gl.f32(t) ** 2 for s in self.seasons.values()
                        for t in s[1])
             fondo = pts[-1][0]
-            if d["lakelevel"] - fondo < Lmax / 2 + 1:
+            amp = self.sp_amp.value() if self.modo == "mar" else 0.0
+            necesario = Lmax / 2 + 1 + amp
+            if d["lakelevel"] - fondo < necesario:
+                que = ("del nivel medio del mar (bajamar + media longitud de onda de la ola "
+                       "más larga)" if self.modo == "mar" else
+                       "del nivel del lago (media longitud de onda de la ola más larga)")
                 errores.append(
-                    f"El perfil debe llegar al menos a {Lmax / 2 + 1:.1f} m por debajo del nivel "
-                    f"del lago (media longitud de onda de la ola más larga); ahora llega a "
-                    f"{d['lakelevel'] - fondo:.1f} m.")
+                    f"El perfil debe llegar al menos a {necesario:.1f} m por debajo {que}; "
+                    f"ahora llega a {d['lakelevel'] - fondo:.1f} m.")
         if self.sp_tdib.value() * (12 if d["UTdib"] == 2 else 1) > \
                 self.sp_tsim.value() * (12 if d["Utsim"] == 2 else 1):
             errores.append("El intervalo de salida es mayor que la duración.")
@@ -1232,7 +1308,18 @@ class Ventana(QMainWindow):
         self._y0_actual = y0
         self._zlago_actual = zlago
         self._fill_erosion = []
-        ax.axhline(zlago, color="#4fa3e0", lw=1.2, ls="-", label=f"Nivel del lago ({zlago:.2f} m)")
+        if self.modo == "mar":
+            amp = self.sp_amp.value()
+            ax.axhline(zlago, color="#4fa3e0", lw=1.2, ls="-",
+                       label=f"Nivel medio del mar ({zlago:.2f} m)")
+            if amp > 0:
+                ax.axhspan(zlago - amp, zlago + amp, color="#4fa3e0", alpha=0.10, lw=0)
+                ax.axhline(zlago + amp, color="#4fa3e0", lw=0.9, ls=":",
+                           label=f"Pleamar / bajamar (±{amp:.1f} m)")
+                ax.axhline(zlago - amp, color="#4fa3e0", lw=0.9, ls=":")
+        else:
+            ax.axhline(zlago, color="#4fa3e0", lw=1.2, ls="-",
+                       label=f"Nivel del lago ({zlago:.2f} m)")
         ax.plot(y0, z, color="#f0f0f0", lw=1.8, label="Perfil inicial (año 0, datos)")
         ax.plot([p[1] for p in d["Pzy"]], [p[0] for p in d["Pzy"]], "o", ms=3.5,
                 color="#bbbbbb", alpha=0.8, label="_vertices")
@@ -1283,11 +1370,15 @@ class Ventana(QMainWindow):
                 cb.ax.tick_params(colors=CANVAS_FG, labelsize=7)
                 cb.outline.set_edgecolor("#5a6270")
             for r in sel:
-                mes, vol, antes, despues = self.res["roturas"][r]
-                ax.plot(antes, z, color="#ff6b6b", lw=1.1, ls="--",
-                        label=f"Antes rotura mes {mes}")
-                ax.plot(despues, z, color="#ff3030", lw=1.6,
-                        label=f"Después rotura mes {mes} ({vol:.1f} m³/m)")
+                if r >= len(self._eventos):
+                    continue
+                mes, tipo, vol, antes, despues, _ = self._eventos[r]
+                c1, c2 = (("#ff6b6b", "#ff3030") if tipo == "Deslizamiento"
+                          else ("#ffc966", COLOR_VUELCO))
+                ax.plot(antes, z, color=c1, lw=1.1, ls="--",
+                        label=f"Antes: {tipo.lower()} mes {mes}")
+                ax.plot(despues, z, color=c2, lw=1.6,
+                        label=f"Después: {tipo.lower()} mes {mes} ({vol:.1f} m³/m)")
 
         # Puntos singulares
         marcas = [(g["crestatalud"], "^", "#ffcc33", "Cresta del talud"),
@@ -1314,9 +1405,10 @@ class Ventana(QMainWindow):
             if hay_res:
                 ys.append(float(np.min(self.res["DibMatriz"][kc + 1:kt + 2, 3:])))
             x0 = min(ys) - 0.5 * H
-            x1 = float(np.max(P[2, tramo])) + 1.0 * H
+            x1 = float(np.max(P[2, kc:kb + 1])) + 1.5 * H
             ax.set_xlim(x0, x1)
-            ax.set_ylim(zlago - 0.5 * H, zmax + 0.15 * H)
+            ax.set_ylim(zlago - 0.5 * H - (self.sp_amp.value() if self.modo == "mar" else 0),
+                        zmax + 0.15 * H)
         else:
             ax.set_xlim(ymin, ymax)
             ax.set_ylim(zmin, zmax + 0.05 * (zmax - zmin))
@@ -1379,24 +1471,37 @@ class Ventana(QMainWindow):
                 t.setItem(i, k, c)
         t.blockSignals(False)
 
+        # deslizamientos circulares y vuelcos, ordenados por mes
+        fss = r.get("roturas_fs", [])
+        ev = [(m, 0, "Deslizamiento", v, a, b, fss[i] if i < len(fss) else None)
+              for i, (m, v, a, b) in enumerate(r["roturas"])]
+        ev += [(m, 1, "Vuelco", v, a, b, None) for (m, v, a, b) in r.get("vuelcos", [])]
+        ev.sort(key=lambda e: (e[0], e[1]))
+        self._eventos = [(m, t, v, a, b, f) for m, _, t, v, a, b, f in ev]
         tr = self.tb_roturas
         tr.setRowCount(0)
-        fss = r.get("roturas_fs", [])
-        for i, (mes, vol, _, _) in enumerate(r["roturas"]):
+        for i, (mes, tipo, vol, _, _, fs) in enumerate(self._eventos):
             tr.insertRow(i)
-            fs_txt = f"{fss[i]:.3f}" if i < len(fss) else ""
-            for k, val in enumerate((f"{mes}", f"{mes / 12:.1f}", f"{vol:.3f}", fs_txt)):
+            fs_txt = f"{fs:.3f}" if fs is not None else "—"
+            for k, val in enumerate((f"{mes}", f"{mes / 12:.1f}", tipo, f"{vol:.3f}", fs_txt)):
                 c = QTableWidgetItem(val)
-                c.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                c.setTextAlignment((Qt.AlignLeft if k == 2 else Qt.AlignRight) | Qt.AlignVCenter)
+                if tipo == "Vuelco":
+                    c.setForeground(QColor("#9a6400"))
                 tr.setItem(i, k, c)
-        self.tabs_der.setTabText(1, f"Roturas ({len(r['roturas'])})")
+        n_d = len(r["roturas"])
+        n_v = len(r.get("vuelcos", []))
+        self.tabs_der.setTabText(1, f"Roturas ({n_d} + {n_v} vuelcos)")
         self._set_invierno = set(r["mensual"]["invierno"])
         self._set_derrubios = set(r["mensual"]["derrubios"])
         self._roturas_mes = {}
-        for rot in r["roturas"]:
-            self._roturas_mes.setdefault(rot[0], []).append(rot)
+        for e in self._eventos:
+            self._roturas_mes.setdefault(e[0], []).append(e)
+        self.linea.texto_invierno = ("invierno: lago helado, sin oleaje ni erosión"
+                                     if r.get("modo") != "mar" else "estación sin oleaje")
         self.linea.configurar(r["meta"]["tsim"], [m for m, *_ in r["roturas"]],
-                              r["mensual"]["invierno"], r["mensual"]["derrubios"])
+                              r["mensual"]["invierno"], r["mensual"]["derrubios"],
+                              [m for m, *_ in r.get("vuelcos", [])])
         self._activar_linea(True)
         self.dibujar_perfil()
         self.dibujar_grafica()
@@ -1479,7 +1584,9 @@ class Ventana(QMainWindow):
         self._txt_mes.set_visible(activo)
         z = self._z_actual
         meta = self.res["meta"]
-        nivel_var = self.res.get("nivel_lago") is not None
+        nivel_var = (self.res.get("nivel_lago") is not None
+                     or (self.res.get("modo") == "mar"
+                         and (self.res.get("mar") or {}).get("subida_mm_ano", 0) != 0))
         self._linea_nivel_mes.set_visible(activo and nivel_var)
         txt_nivel = ""
         if activo and nivel_var:
@@ -1488,7 +1595,8 @@ class Ventana(QMainWindow):
             if i >= 0:
                 zl = float(men["nivel"][i])
                 self._linea_nivel_mes.set_ydata([zl, zl])
-                txt_nivel = f" · nivel del lago {zl:+.2f} m"
+                txt_nivel = (f" · nivel medio del mar {zl:+.2f} m" if self.res.get("modo") == "mar"
+                             else f" · nivel del lago {zl:+.2f} m")
         if activo:
             perfil = self._perfil_mes(mes)
             self._linea_mes.set_xdata(perfil)
@@ -1502,29 +1610,36 @@ class Ventana(QMainWindow):
                         z, perfil, y0, where=donde, color=color, alpha=0.9, lw=0,
                         zorder=1, animated=True))
             rot = self._roturas_mes.get(mes, [])
-            for antes in rot:
-                ln, = ax.plot(antes[2], z, color="#ff6b6b", lw=1.0, ls="--", zorder=5,
-                              animated=True)
+            for e in rot:
+                ln, = ax.plot(e[3], z, color="#ff6b6b" if e[1] == "Deslizamiento" else "#ffc966",
+                              lw=1.0, ls="--", zorder=5, animated=True)
                 self._art_mes.append(ln)
             P0 = self.res["profile_inicial"]
             TL, kc = meta["TL"], meta["crestatalud"]
             r_lago = P0[2, TL] - perfil[TL - 1]
             r_cresta = P0[2, kc] - perfil[kc - 1]
             if mes in self._set_invierno:
-                estado = "invierno: no se calcula"
+                estado = self.linea.texto_invierno
             elif mes in self._set_derrubios:
                 estado = "protegido por derrubios: sin erosión"
             else:
                 estado = "calculado"
             txt = f"Mes {mes}  ·  año {mes / 12:.2f}"
+            nd = sum(1 for e in rot if e[1] == "Deslizamiento")
+            nv = len(rot) - nd
+            partes = []
+            if nd:
+                partes.append(f"{nd} deslizamiento{'s' if nd > 1 else ''}")
+            if nv:
+                partes.append(f"{nv} vuelco{'s' if nv > 1 else ''}")
             if rot:
-                txt += f"\n{len(rot)} rotura{'s' if len(rot) > 1 else ''} " \
-                       f"({sum(r[1] for r in rot):.1f} m³/m)"
+                txt += "\n" + ", ".join(partes) + f" ({sum(e[2] for e in rot):.1f} m³/m)"
             self._txt_mes.set_text(txt)
+            nom_nivel = "nivel del mar" if self.res.get("modo") == "mar" else "nivel del lago"
             self.lb_mes.setText(
                 f"Mes {mes} de {meta['tsim']} (año {mes / 12:.2f}) · {estado} · "
-                f"retroceso: nivel del lago {_f2(r_lago)} m, cresta {_f2(r_cresta)} m"
-                + (f" · {len(rot)} rotura(s)" if rot else "") + txt_nivel)
+                f"retroceso: {nom_nivel} {_f2(r_lago)} m, cresta {_f2(r_cresta)} m"
+                + (" · " + ", ".join(partes) if rot else "") + txt_nivel)
         else:
             self.lb_mes.setText(f"Mes 0 (perfil inicial) · arrastra la barra para ver la "
                                 f"evolución mes a mes hasta el mes {meta['tsim']}")
@@ -1582,14 +1697,21 @@ class Ventana(QMainWindow):
                 ax.legend(fontsize=8)
             ax.set_ylabel("Retroceso (m)")
         else:
-            rot = self.res["roturas"]
-            if rot:
-                t = np.array([m for m, *_ in rot]) / 12.0
-                v = np.cumsum([vv for _, vv, *_ in rot])
-                ax.step(t, v, where="post", color=ACCENT)
+            ev = getattr(self, "_eventos", [])
+            if ev:
+                t = np.array([e[0] for e in ev]) / 12.0
+                v = np.cumsum([e[2] for e in ev])
+                ax.step(t, v, where="post", color=ACCENT, label="Total")
                 ax.plot(t, v, "o", color=ACCENT, ms=3)
+                for tipo, c in (("Deslizamiento", "#d0312d"), ("Vuelco", "#c98a00")):
+                    sub = [e for e in ev if e[1] == tipo]
+                    if sub:
+                        ax.step(np.array([e[0] for e in sub]) / 12.0,
+                                np.cumsum([e[2] for e in sub]), where="post", color=c,
+                                lw=1, ls="--", label=tipo + "s")
+                ax.legend(fontsize=8)
             else:
-                ax.text(0.5, 0.5, "No se han producido roturas circulares",
+                ax.text(0.5, 0.5, "No se han producido roturas",
                         transform=ax.transAxes, ha="center", color="#888")
             ax.set_ylabel("Volumen acumulado (m³/m)")
         ax.set_xlabel("Tiempo (años)")
@@ -1636,7 +1758,7 @@ class Ventana(QMainWindow):
         self._cambio_oleaje()
 
     def restablecer_oleaje(self):
-        self.seasons = copy.deepcopy(gl.SEASONS)
+        self.seasons = copy.deepcopy(self._seasons_defecto())
         self.mostrar_oleaje()
 
     def _dibujar_oleaje(self):
@@ -1651,17 +1773,25 @@ class Ventana(QMainWindow):
                           fontsize=7)
             ax.set_ylabel("Frecuencia (%)")
         else:
-            ax.text(0.5, 0.5, "Sin oleaje (el invierno no erosiona)", transform=ax.transAxes,
-                    ha="center", color="#888")
+            ax.text(0.5, 0.5, "Sin oleaje en esta estación" + (" (el invierno no erosiona)"
+                                                                if self.modo == "lago" else ""),
+                    transform=ax.transAxes, ha="center", color="#888")
         lz.fig.tight_layout()
         lz.draw_idle()
-        modificado = self.seasons != gl.SEASONS
-        self.lb_oleaje.setText(
-            "Oleaje por estación usado por el modelo (Trenhaile, 2009). "
-            "Primavera: meses 4-6, verano: 7-9, otoño: 10-12; los meses de invierno (1-3) "
-            "no se calculan."
-            + ("\n⚠ Valores modificados respecto al código original: los resultados ya no "
-               "coincidirán con el Fortran." if modificado else ""))
+        modificado = self.seasons != self._seasons_defecto()
+        if self.modo == "lago":
+            base = ("Oleaje por estación usado por el modelo (Trenhaile, 2009), lago Erie. "
+                    "Primavera: meses 4-6, verano: 7-9, otoño: 10-12; los meses de invierno "
+                    "(1-3) no se calculan (hielo).")
+            aviso = ("\n⚠ Valores modificados respecto al código original: los resultados ya "
+                     "no coincidirán con el Fortran.")
+        else:
+            base = ("Modo mar: se calculan los 12 meses con el oleaje de su estación "
+                    "(invierno: ene-mar). Por defecto, distribución ilustrativa cuya altura "
+                    "media (≈1 m) coincide con la de Holderness según la tesis; conviene "
+                    "sustituirla por datos de una boya cercana.")
+            aviso = "\n⚠ Valores modificados respecto a los de por defecto del modo mar."
+        self.lb_oleaje.setText(base + (aviso if modificado else ""))
         self.lb_oleaje.setStyleSheet("color: #b0451d;" if modificado else "")
 
     # -------------------------------------------------------- nivel/mareas
@@ -1726,9 +1856,59 @@ class Ventana(QMainWindow):
                 "Fortran ni con la tesis (calibrada con Fellenius)." + extra)
             self.lb_aviso_estab.setStyleSheet("color: #b0451d;")
 
+    def opciones_mar(self):
+        """Opciones del modo mar para gl.run (None en modo lago)."""
+        if self.modo != "mar":
+            return None
+        return {"amplitud": self.sp_amp.value(), "subida_mm_ano": self.sp_subida.value(),
+                "niveles": self.sp_nmarea.value()}
+
+    def _mar_defecto(self):
+        self.sp_amp.setValue(gl.MAR_TESIS["amplitud"])
+        self.sp_subida.setValue(gl.MAR_TESIS["subida_mm_ano"])
+        self.sp_nmarea.setValue(gl.MAR_TESIS["niveles"])
+
+    def cambiar_modo(self, modo, limpiar=True):
+        """Cambia entre lago (modelo original) y mar (adaptacion con marea)."""
+        if modo == self.modo and not limpiar:
+            return
+        self.modo = modo
+        self.acciones_modo[modo].setChecked(True)
+        self.marca.setText("LAGO" if modo == "lago" else "MAR")
+        self.lb_nivel_barra.setText("Nivel del lago:" if modo == "lago" else "Nivel medio del mar:")
+        self.grp_nivel_lago.setVisible(modo == "lago")
+        self.grp_marea.setVisible(modo == "mar")
+        self.lb_leyenda_linea.setText(self._texto_leyenda())
+        self._actualizar_titulo()
+        self.tb_salidas.setHorizontalHeaderLabels(
+            ["Ver", "Mes", "Año",
+             "Retroceso\nnivel lago (m)" if modo == "lago" else "Retroceso nivel\nmedio mar (m)",
+             "Retroceso\ncresta (m)"])
+        self.mostrar_oleaje()
+        if limpiar:
+            self._limpiar_resultados()
+        self.dibujar_perfil()
+        self._cambio_opciones_nivel()
+
+    def _texto_leyenda(self):
+        inv = "invierno: lago helado" if getattr(self, "modo", "lago") == "lago" else "sin oleaje"
+        return (f'<span style="color:{COLOR_ROTURA}">┃</span> deslizamiento &nbsp; '
+                f'<span style="color:{COLOR_VUELCO}">╻</span> vuelco &nbsp;&nbsp; '
+                f'<span style="color:{COLOR_MES_CALCULADO}; background:{COLOR_MES_CALCULADO}">'
+                f'&nbsp;&nbsp;&nbsp;</span> mes con erosión &nbsp;&nbsp; '
+                f'<span style="color:{COLOR_INVIERNO}">█</span> {inv} &nbsp;&nbsp; '
+                f'<span style="color:{COLOR_DERRUBIOS}">█</span> pie protegido por derrubios')
+
+    def _actualizar_titulo(self):
+        modo = "lago" if self.modo == "lago" else "mar"
+        t = f"{APP_NAME} [{modo}]"
+        if self.ruta:
+            t += f" — {self.ruta}"
+        self.setWindowTitle(t)
+
     def opciones_nivel(self):
         """Opciones de nivel variable para gl.run (None = constante, como el original)."""
-        if not hasattr(self, "ck_estacional"):
+        if not hasattr(self, "ck_estacional") or self.modo != "lago":
             return None
         est = self.ck_estacional.isChecked()
         inter = self.ck_interanual.isChecked()
@@ -1759,8 +1939,14 @@ class Ventana(QMainWindow):
         res = self.res
         if res is not None and len(res["mensual"]["meses"]):
             men = res["mensual"]
+            es_mar = res.get("modo") == "mar"
             ax.step(men["meses"] / 12.0, men["nivel"], where="post", color=ACCENT, lw=1.3,
-                    label="Nivel usado en el cálculo")
+                    label="Nivel medio del mar" if es_mar else "Nivel usado en el cálculo")
+            if es_mar and res.get("mar") and res["mar"]["amplitud"] > 0:
+                a_ = res["mar"]["amplitud"]
+                ax.fill_between(men["meses"] / 12.0, men["nivel"] - a_, men["nivel"] + a_,
+                                step="post", color="#4fa3e0", alpha=0.15,
+                                label=f"Rango de marea (±{a_:.1f} m)")
             hay = True
         else:
             ax.axhline(lago, color=ACCENT, ls="--", lw=1, label="Nivel del lago (constante)")
@@ -1781,7 +1967,9 @@ class Ventana(QMainWindow):
         if not hay:
             pass
         op = self.opciones_nivel() if hasattr(self, "ck_estacional") else None
-        if op is None:
+        if self.modo == "mar":
+            pass
+        elif op is None:
             self.lb_aviso_nivel.setText(
                 "Desactivado: nivel constante, igual que el Fortran original (resultados "
                 "idénticos).")
@@ -1801,11 +1989,23 @@ class Ventana(QMainWindow):
                                                (("estacional", nl.get("estacional")),
                                                 ("interanual", nl.get("interanual"))) if ok)
                       + ")."))
-        self.lb_nivel.setText(
-            "La serie de marea.dat solo se visualiza: el modelo no la lee (en el Fortran "
-            "original esa lectura está comentada). La variación que sí interviene en el "
-            "cálculo es la de arriba: estacional (Tabla 10.iii de la tesis: +0,40 m en "
-            "primavera y +0,30 m en verano) y ciclo interanual." + usado)
+        if self.modo == "mar":
+            if res is not None and res.get("modo") == "mar":
+                usado = (f" Último cálculo: marea ±{res['mar']['amplitud']:.2f} m en "
+                         f"{len(res['mar']['bandas'])} niveles, subida "
+                         f"{res['mar']['subida_mm_ano']:g} mm/año.")
+            else:
+                usado = ""
+            self.lb_nivel.setText(
+                "La serie cargada (por ejemplo, marea.dat) solo se visualiza. En el cálculo "
+                "interviene la marea sinusoidal definida arriba y la subida del nivel medio "
+                "del mar." + usado)
+        else:
+            self.lb_nivel.setText(
+                "La serie de marea.dat solo se visualiza: el modelo no la lee (en el Fortran "
+                "original esa lectura está comentada). La variación que sí interviene en el "
+                "cálculo es la de arriba: estacional (Tabla 10.iii de la tesis: +0,40 m en "
+                "primavera y +0,30 m en verano) y ciclo interanual." + usado)
 
     # ------------------------------------------------------ edicion tablas
     def anadir_punto(self):
@@ -1849,7 +2049,7 @@ class Ventana(QMainWindow):
     def nuevo(self):
         self.ruta = None
         self.res = None
-        self.setWindowTitle(APP_NAME)
+        self._actualizar_titulo()
         self.cargar_datos(caso_por_defecto())
         self._limpiar_resultados()
 
@@ -1867,10 +2067,19 @@ class Ventana(QMainWindow):
             return
         self.ruta = os.path.abspath(ruta)
         self.res = None
-        self.setWindowTitle(f"{APP_NAME} — {self.ruta}")
         self.cargar_datos(d)
+        extra = ""
+        ro = self._ruta_opciones(self.ruta)
+        if os.path.exists(ro):
+            try:
+                with open(ro, encoding="utf-8") as fh:
+                    self.aplicar_opciones_herramienta(json.load(fh))
+                extra = f" (con las opciones de {os.path.basename(ro)}: modo {self.modo})"
+            except Exception as exc:  # noqa: BLE001
+                extra = f" (no se han podido leer las opciones: {exc})"
+        self._actualizar_titulo()
         self._limpiar_resultados()
-        self.statusBar().showMessage(f"Abierto {self.ruta}")
+        self.statusBar().showMessage(f"Abierto {self.ruta}{extra}")
 
     def guardar(self):
         if not self.ruta:
@@ -1885,17 +2094,64 @@ class Ventana(QMainWindow):
             return False
         if self._guardar_en(ruta):
             self.ruta = os.path.abspath(ruta)
-            self.setWindowTitle(f"{APP_NAME} — {self.ruta}")
+            self._actualizar_titulo()
             return True
         return False
+
+    @staticmethod
+    def _ruta_opciones(ruta):
+        return os.path.splitext(ruta)[0] + ".herramienta.json"
+
+    def opciones_herramienta(self):
+        """Opciones de la herramienta que no caben en data.dat."""
+        return {
+            "modo": self.modo,
+            "mar": {"amplitud": self.sp_amp.value(), "subida_mm_ano": self.sp_subida.value(),
+                    "niveles": self.sp_nmarea.value()},
+            "estabilidad": {"metodo": self.cb_metodo.currentData(),
+                            "rebanadas": self.sp_rebanadas.value(),
+                            "criterio": self.cb_criterio.currentData()},
+            "nivel_lago": {"estacional": self.ck_estacional.isChecked(),
+                           "interanual": self.ck_interanual.isChecked(),
+                           "subidas": {k: sp.value() for k, sp in self.sp_estac.items()}},
+            "oleaje": self.seasons_por_modo,
+        }
+
+    def aplicar_opciones_herramienta(self, op):
+        mar = op.get("mar", {})
+        self.sp_amp.setValue(mar.get("amplitud", gl.MAR_TESIS["amplitud"]))
+        self.sp_subida.setValue(mar.get("subida_mm_ano", gl.MAR_TESIS["subida_mm_ano"]))
+        self.sp_nmarea.setValue(mar.get("niveles", gl.MAR_TESIS["niveles"]))
+        est = op.get("estabilidad", {})
+        i = self.cb_metodo.findData(est.get("metodo", "fellenius"))
+        self.cb_metodo.setCurrentIndex(max(0, i))
+        self.sp_rebanadas.setValue(int(est.get("rebanadas", 5)))
+        i = self.cb_criterio.findData(est.get("criterio", "todas"))
+        self.cb_criterio.setCurrentIndex(max(0, i))
+        nl = op.get("nivel_lago", {})
+        for k, v in nl.get("subidas", {}).items():
+            if k in self.sp_estac:
+                self.sp_estac[k].setValue(v)
+        self.ck_estacional.setChecked(bool(nl.get("estacional")))
+        self.ck_interanual.setChecked(bool(nl.get("interanual")))
+        ole = op.get("oleaje")
+        if ole:
+            for m in ("lago", "mar"):
+                if m in ole:
+                    self.seasons_por_modo[m] = {k: tuple(list(x) for x in v)
+                                                for k, v in ole[m].items()}
+        self.cambiar_modo(op.get("modo", "lago"))
 
     def _guardar_en(self, ruta):
         try:
             gl.write_data(ruta, self.leer_datos())
+            with open(self._ruta_opciones(ruta), "w", encoding="utf-8") as fh:
+                json.dump(self.opciones_herramienta(), fh, indent=2, ensure_ascii=False)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, APP_NAME, f"No se ha podido guardar:\n{exc}")
             return False
-        self.statusBar().showMessage(f"Guardado {ruta}")
+        self.statusBar().showMessage(f"Guardado {ruta} (y opciones de la herramienta en "
+                                     f"{os.path.basename(self._ruta_opciones(ruta))})")
         return True
 
     def guardar_figura(self, fig):
@@ -1933,6 +2189,7 @@ class Ventana(QMainWindow):
 
     def _limpiar_resultados(self):
         self.res = None
+        self._eventos = []
         self._activar_linea(False)
         self.tb_salidas.setRowCount(0)
         self.tb_roturas.setRowCount(0)
@@ -1964,9 +2221,10 @@ class Ventana(QMainWindow):
         gl.write_data(os.path.join(self.res_dir, "data.dat"), d)
 
         self.hilo = QThread()
-        seasons = None if self.seasons == gl.SEASONS else copy.deepcopy(self.seasons)
+        seasons = (None if self.seasons == self._seasons_defecto()
+                   else copy.deepcopy(self.seasons))
         self.worker = Worker(self.res_dir, seasons, self.opciones_nivel(),
-                             self.opciones_estabilidad())
+                             self.opciones_estabilidad(), self.opciones_mar())
         self.worker.moveToThread(self.hilo)
         self.hilo.started.connect(self.worker.run)
         self.worker.progreso.connect(self._progreso)
@@ -2003,7 +2261,8 @@ class Ventana(QMainWindow):
         txt_est = (f"{nombres.get(est.get('metodo'), '?')}, {est.get('rebanadas')} rebanadas, "
                    f"criterio «{est.get('criterio')}»")
         self.statusBar().showMessage(
-            f"Cálculo terminado en {segundos:.1f} s · {len(res['roturas'])} roturas · "
+            f"Cálculo terminado en {segundos:.1f} s · modo {res.get('modo', 'lago')} · "
+            f"{len(res['roturas'])} deslizamientos y {len(res.get('vuelcos', []))} vuelcos · "
             f"estabilidad: {txt_est} · salidas en {self.res_dir}")
 
     def _error(self, msg):

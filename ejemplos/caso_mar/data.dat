@@ -1,0 +1,42 @@
+Caso_mar_tipo_Holderness_(modo_mar_de_la_herramienta)
+Enter run number
+1
+Units of simulation time (1:months; 2:years)_integer
+2
+Simulation time
+20
+Units per result output (1:months; 2:years)_integer
+2
+Result output time
+1
+Vertical discretization size (m)
+0.1
+Tidal level (m above/below[in negative] zero)
+0
+Sand amount (m3/m)
+5.0
+Sand grain diameter (m)
+0.001
+Groundwater (0:no; 1:yes; 2: fully saturated); Groundwater depth landward (m)
+1,2.5
+Number of geological layers (from top to bottom)
+2
+Clay erosion treshold value [0.5-20 Pa]; Coef. for shear stress [Kss]; Calibration coef. [p]
+5.0 2.4e-06 1.0
+Threshold surf force [50-500 Kg/m^2]; Coef. for bluff erosion [MMM]
+70.0 1e-08
+Treshold run-up distance; Coef. for run-up [Cb]; Coef. for Rs to shear [KRs]; Beach material factor [Bmat]
+5.0 1e-07 1.0 1.0
+UCS (KPa); Shear strength (KPa); Effective cohesion (KPa); Effective friction angle (deg); Unit weight (KN/m**3); Strata depth (m)
+164.0 8.0 22.0 21.0 23.4 3.0
+182.0 8.0 26.0 23.0 23.4 100.0
+Debris Mobility Coeff. (m**2/day)
+2.0
+Bluff initial profile (m) [1:Study point; 2:Talus wedge; 3:Seepage point; 4:Talus base point => roturanotch]
+15.0000001 -500.0 0.0
+15.0000001 -12.5 2.0
+8.0 -5.5 3.0
+5.0 -2.5 1.0
+2.5 0.0 4.0
+-3.5 300.0 0.0
+-80.0 2500.0 0.0
