@@ -143,10 +143,11 @@ class Worker(QObject):
     terminado = Signal(object, float)
     error = Signal(str)
 
-    def __init__(self, workdir, seasons):
+    def __init__(self, workdir, seasons, nivel_lago=None):
         super().__init__()
         self.workdir = workdir
         self.seasons = seasons
+        self.nivel_lago = nivel_lago
         self._cancelar = False
 
     def cancelar(self):
@@ -164,7 +165,9 @@ class Worker(QObject):
             return not self._cancelar
 
         try:
-            res = gl.run(self.workdir, verbose=False, progress=prog, seasons=self.seasons)
+            res = gl.run(self.workdir, verbose=False, progress=prog, seasons=self.seasons,
+                         nivel_lago=self.nivel_lago)
+            res["nivel_lago"] = self.nivel_lago
         except gl.Cancelled:
             self.error.emit("Cálculo detenido por el usuario.")
             return
@@ -818,6 +821,38 @@ class Ventana(QMainWindow):
         fila.addWidget(b)
         fila.addStretch(1)
         v.addLayout(fila)
+
+        g = QGroupBox("Variación del nivel del lago en el cálculo")
+        gf = QVBoxLayout(g)
+        self.ck_estacional = QCheckBox("Variación estacional (subida respecto al nivel del lago):")
+        gf.addWidget(self.ck_estacional)
+        fe = QHBoxLayout()
+        self.sp_estac = {}
+        for clave, nombre in ESTACIONES:
+            fe.addWidget(QLabel(nombre))
+            sp = dspin(-5, 5, 2, 0.1, "m")
+            sp.setValue(gl.NIVEL_ESTACIONAL_TESIS[clave])
+            sp.valueChanged.connect(self._cambio_opciones_nivel)
+            self.sp_estac[clave] = sp
+            fe.addWidget(sp)
+        fe.addStretch(1)
+        gf.addLayout(fe)
+        self.ck_interanual = QCheckBox("Ciclo interanual de 15 años (±5·Δz, cambios cada 9 meses "
+                                       "desde el mes 69)")
+        gf.addWidget(self.ck_interanual)
+        fb = QHBoxLayout()
+        b = QPushButton("Valores de la tesis")
+        b.clicked.connect(self._nivel_tesis)
+        fb.addWidget(b)
+        fb.addStretch(1)
+        gf.addLayout(fb)
+        self.lb_aviso_nivel = QLabel("", objectName="note")
+        self.lb_aviso_nivel.setWordWrap(True)
+        gf.addWidget(self.lb_aviso_nivel)
+        for ck in (self.ck_estacional, self.ck_interanual):
+            ck.toggled.connect(self._cambio_opciones_nivel)
+        v.addWidget(g)
+
         self.graf_nivel = Lienzo()
         v.addWidget(self.graf_nivel, 1)
         self.lb_nivel = QLabel("", objectName="note")
@@ -830,7 +865,7 @@ class Ventana(QMainWindow):
         dock.setMinimumWidth(560)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         self.mostrar_oleaje()
-        self.dibujar_nivel()
+        self._cambio_opciones_nivel()
 
     # ------------------------------------------------------- datos <-> UI
     def cargar_datos(self, d):
@@ -1122,6 +1157,8 @@ class Ventana(QMainWindow):
                                     bbox=dict(boxstyle="round,pad=0.35",
                                               fc="#1d2128", ec="#00e5ff", lw=0.8))
             self._txt_mes.set_visible(False)
+            self._linea_nivel_mes = ax.axhline(zlago, color="#7cc4ff", lw=1.6, ls="--",
+                                               zorder=6, visible=False, animated=True)
             self._actualizar_mes(redibujar=False)
         else:
             self._linea_mes = None
@@ -1184,6 +1221,7 @@ class Ventana(QMainWindow):
         self._activar_linea(True)
         self.dibujar_perfil()
         self.dibujar_grafica()
+        self.dibujar_nivel()
 
     # ------------------------------------------------------ linea temporal
     def _activar_linea(self, activa):
@@ -1229,7 +1267,8 @@ class Ventana(QMainWindow):
         return men["perfiles"][i]
 
     def _animados(self):
-        return self._fill_erosion + self._art_mes + [self._linea_mes, self._txt_mes]
+        return (self._fill_erosion + self._art_mes
+                + [self._linea_nivel_mes, self._linea_mes, self._txt_mes])
 
     def _on_draw(self, _evento):
         """Tras un dibujo completo guarda el fondo y pinta los elementos del mes."""
@@ -1261,6 +1300,16 @@ class Ventana(QMainWindow):
         self._txt_mes.set_visible(activo)
         z = self._z_actual
         meta = self.res["meta"]
+        nivel_var = self.res.get("nivel_lago") is not None
+        self._linea_nivel_mes.set_visible(activo and nivel_var)
+        txt_nivel = ""
+        if activo and nivel_var:
+            men = self.res["mensual"]
+            i = int(np.searchsorted(men["meses"], mes, side="right")) - 1
+            if i >= 0:
+                zl = float(men["nivel"][i])
+                self._linea_nivel_mes.set_ydata([zl, zl])
+                txt_nivel = f" · nivel del lago {zl:+.2f} m"
         if activo:
             perfil = self._perfil_mes(mes)
             self._linea_mes.set_xdata(perfil)
@@ -1296,7 +1345,7 @@ class Ventana(QMainWindow):
             self.lb_mes.setText(
                 f"Mes {mes} de {meta['tsim']} (año {mes / 12:.2f}) · {estado} · "
                 f"retroceso: nivel del lago {_f2(r_lago)} m, cresta {_f2(r_cresta)} m"
-                + (f" · {len(rot)} rotura(s)" if rot else ""))
+                + (f" · {len(rot)} rotura(s)" if rot else "") + txt_nivel)
         else:
             self.lb_mes.setText(f"Mes 0 (perfil inicial) · arrastra la barra para ver la "
                                 f"evolución mes a mes hasta el mes {meta['tsim']}")
@@ -1469,30 +1518,81 @@ class Ventana(QMainWindow):
         self.serie_nivel = None
         self.dibujar_nivel()
 
+    def opciones_nivel(self):
+        """Opciones de nivel variable para gl.run (None = constante, como el original)."""
+        if not hasattr(self, "ck_estacional"):
+            return None
+        est = self.ck_estacional.isChecked()
+        inter = self.ck_interanual.isChecked()
+        if not (est or inter):
+            return None
+        return {"estacional": ({k: sp.value() for k, sp in self.sp_estac.items()}
+                               if est else None),
+                "interanual": inter}
+
+    def _nivel_tesis(self):
+        for k, sp in self.sp_estac.items():
+            sp.setValue(gl.NIVEL_ESTACIONAL_TESIS[k])
+        self.ck_estacional.setChecked(True)
+        self.ck_interanual.setChecked(True)
+
+    def _cambio_opciones_nivel(self, *_):
+        for sp in self.sp_estac.values():
+            sp.setEnabled(self.ck_estacional.isChecked())
+        self.dibujar_nivel()
+
     def dibujar_nivel(self):
         lz = self.graf_nivel
         ax = lz.ax
         ax.clear()
         lz.estilo()
         lago = self.sp_lake.value() if hasattr(self, "sp_lake") else 0
+        hay = False
+        res = self.res
+        if res is not None and len(res["mensual"]["meses"]):
+            men = res["mensual"]
+            ax.step(men["meses"] / 12.0, men["nivel"], where="post", color=ACCENT, lw=1.3,
+                    label="Nivel usado en el cálculo")
+            hay = True
+        else:
+            ax.axhline(lago, color=ACCENT, ls="--", lw=1, label="Nivel del lago (constante)")
         if self.serie_nivel is not None:
             nombre, t, z = self.serie_nivel
-            ax.plot(t, z, color="#1e88e5", lw=1.2, label=nombre)
-            ax.axhline(lago, color=ACCENT, ls="--", lw=1, label="Nivel usado por el modelo")
-            ax.set_xlabel("Tiempo")
-            ax.legend(fontsize=8)
-        else:
-            ax.axhline(lago, color=ACCENT, ls="--", lw=1)
-            ax.text(0.5, 0.6, "Sin serie cargada", transform=ax.transAxes, ha="center",
-                    color="#888")
+            ax.plot(t, z, color="#1e88e5", lw=1.0, label=f"Serie cargada: {nombre}")
+            hay = True
+        ax.set_xlabel("Tiempo (años)" if self.serie_nivel is None else "Tiempo")
         ax.set_ylabel("Nivel (m)")
+        ax.legend(fontsize=8)
         lz.fig.tight_layout()
         lz.draw_idle()
+        if not hay:
+            pass
+        op = self.opciones_nivel() if hasattr(self, "ck_estacional") else None
+        if op is None:
+            self.lb_aviso_nivel.setText(
+                "Desactivado: nivel constante, igual que el Fortran original (resultados "
+                "idénticos).")
+            self.lb_aviso_nivel.setStyleSheet("")
+        else:
+            self.lb_aviso_nivel.setText(
+                "⚠ Activado: el original tiene esta variación comentada; con ella los "
+                "resultados ya no coinciden con el Fortran. Los desniveles se redondean a "
+                "múltiplos de Δz.")
+            self.lb_aviso_nivel.setStyleSheet("color: #b0451d;")
+        usado = ""
+        if res is not None:
+            nl = res.get("nivel_lago")
+            usado = (" Último cálculo: nivel " +
+                     ("constante." if nl is None else
+                      "variable (" + ", ".join(x for x, ok in
+                                               (("estacional", nl.get("estacional")),
+                                                ("interanual", nl.get("interanual"))) if ok)
+                      + ")."))
         self.lb_nivel.setText(
-            "El modelo usa un nivel del lago constante («Nivel del lago» en la barra "
-            "superior). En el código Fortran original la lectura de marea.dat y la variación "
-            "interanual del nivel están desactivadas, así que la serie cargada aquí solo se "
-            "visualiza: no interviene en el cálculo.")
+            "La serie de marea.dat solo se visualiza: el modelo no la lee (en el Fortran "
+            "original esa lectura está comentada). La variación que sí interviene en el "
+            "cálculo es la de arriba: estacional (Tabla 10.iii de la tesis: +0,40 m en "
+            "primavera y +0,30 m en verano) y ciclo interanual." + usado)
 
     # ------------------------------------------------------ edicion tablas
     def anadir_punto(self):
@@ -1652,7 +1752,7 @@ class Ventana(QMainWindow):
 
         self.hilo = QThread()
         seasons = None if self.seasons == gl.SEASONS else copy.deepcopy(self.seasons)
-        self.worker = Worker(self.res_dir, seasons)
+        self.worker = Worker(self.res_dir, seasons, self.opciones_nivel())
         self.worker.moveToThread(self.hilo)
         self.hilo.started.connect(self.worker.run)
         self.worker.progreso.connect(self._progreso)
