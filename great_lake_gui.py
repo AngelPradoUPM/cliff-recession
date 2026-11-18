@@ -28,10 +28,10 @@ import sys
 import time
 
 import numpy as np
-from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDockWidget,
+    QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDockWidget,
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QMainWindow, QMenu, QMessageBox, QProgressBar,
     QPushButton, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem,
@@ -259,6 +259,26 @@ class Lienzo(FigureCanvas):
             ax.grid(True, color="#e6e6e6", lw=0.6)
             for s in ("top", "right"):
                 ax.spines[s].set_visible(False)
+
+
+class FiltroRueda(QObject):
+    """Evita que la rueda del raton cambie desplegables y campos numericos.
+
+    Al girar la rueda sobre un QComboBox o un campo numerico no se cambia su
+    valor: el giro se pasa al panel desplazable que lo contiene (que se
+    desplaza, como en cualquier otra parte). Para cambiar el valor hay que
+    hacer clic, escribir o usar el teclado.
+    """
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.Wheel and isinstance(obj, (QComboBox, QAbstractSpinBox)):
+            padre = obj.parentWidget()
+            while padre is not None and not isinstance(padre, QAbstractScrollArea):
+                padre = padre.parentWidget()
+            if padre is not None:
+                QApplication.sendEvent(padre.viewport(), ev)
+            return True
+        return False
 
 
 class InfoBoton(QToolButton):
@@ -496,6 +516,8 @@ class Ventana(QMainWindow):
         super().__init__()
         self.setWindowTitle(APP_NAME)
         self.resize(1600, 950)
+        self._filtro_rueda = FiltroRueda(self)
+        QApplication.instance().installEventFilter(self._filtro_rueda)
         self.ruta = None
         self.res = None
         self.res_dir = None
