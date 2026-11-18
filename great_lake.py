@@ -489,6 +489,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
     fout2 = open(os.path.join(workdir, "timerecesion.out"), "w")
     trec = []      # filas de timerecesion.out
     roturas = []   # (mes, volumen, perfil antes, perfil despues)
+    primer_paso = None   # (mes, perfil) al final del primer mes calculado
 
     def record(jt):
         """Guarda el perfil en DibMatriz si jt es un instante de salida."""
@@ -1219,6 +1220,8 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
                     elif Sigmatensilemax < Sigmatensilerock:
                         volacumulado = F64(0)
             # 54
+            if primer_paso is None:
+                primer_paso = (Tglob, P[2, 1:N + 1].astype(float))
             record(Tglob)
 
             # Tiempo sin erosion por proteccion de los derrubios
@@ -1322,6 +1325,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None):
         "profile_inicial": P_inicial,
         "timerecesion": trec,
         "roturas": roturas,
+        "primer_paso": primer_paso,
         "meta": dict(N=N, tsim=tsim, Tdib=Tdib, Dz=float(Dz), TL=TL,
                      zerolevel=zerolevel, crestatalud=crestatalud,
                      seepagelevel=seepagelevel, label=label[1:nlabel + 1],

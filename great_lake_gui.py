@@ -499,6 +499,18 @@ class Ventana(QMainWindow):
         self.tb_salidas.verticalHeader().setVisible(False)
         self.tb_salidas.itemChanged.connect(self._cambio_salidas)
         v.addWidget(self.tb_salidas)
+        self.ck_primer = QCheckBox("Mostrar el perfil tras el primer mes calculado "
+                                   "(roturas iniciales)")
+        self.ck_primer.setChecked(True)
+        self.ck_primer.toggled.connect(self.dibujar_perfil)
+        v.addWidget(self.ck_primer)
+        nota = QLabel("La línea blanca es el perfil inicial de los datos (año 0). Si el "
+                      "perfil inicial es inestable con los parámetros del terreno, en el "
+                      "primer mes calculado (mes 4; enero-marzo no se calculan) se producen "
+                      "varias roturas seguidas: véase la pestaña «Roturas».",
+                      objectName="note")
+        nota.setWordWrap(True)
+        v.addWidget(nota)
         self.lb_resdir = QLabel("Sin resultados. Pulsa «Calcular».", objectName="note")
         self.lb_resdir.setWordWrap(True)
         v.addWidget(self.lb_resdir)
@@ -810,7 +822,7 @@ class Ventana(QMainWindow):
                 terreno = self.res["DibMatriz"][2:N + 2, vis[-1] + 3]
         ax.fill_betweenx(z, ymin - 1e6, terreno, color="#6b5a45", alpha=0.55, lw=0)
         ax.axhline(zlago, color="#4fa3e0", lw=1.2, ls="-", label=f"Nivel del lago ({zlago:.2f} m)")
-        ax.plot(y0, z, color="#f0f0f0", lw=1.8, label="Perfil inicial")
+        ax.plot(y0, z, color="#f0f0f0", lw=1.8, label="Perfil inicial (año 0, datos)")
         ax.plot([p[1] for p in d["Pzy"]], [p[0] for p in d["Pzy"]], "o", ms=3.5,
                 color="#bbbbbb", alpha=0.8, label="_vertices")
 
@@ -832,8 +844,18 @@ class Ventana(QMainWindow):
                     if self.tb_salidas.item(r, 0) is not None
                     and self.tb_salidas.item(r, 0).checkState() == Qt.Checked]
             cmap = matplotlib.colormaps["plasma"]
-            tmax = max(1.0, float(np.max(Dib[1, 3:])) / 12.0)
-            norm = matplotlib.colors.Normalize(0.0, tmax)
+            anos = Dib[1, 3:][Dib[1, 3:] > 0] / 12.0
+            amin = float(anos.min()) if anos.size else 0.0
+            amax = float(anos.max()) if anos.size else 1.0
+            if amax <= amin:
+                amin, amax = amin - 0.5, amax + 0.5
+            norm = matplotlib.colors.Normalize(amin, amax)
+            pp = self.res.get("primer_paso")
+            if pp is not None and self.ck_primer.isChecked():
+                mes_pp, perfil_pp = pp
+                ax.plot(perfil_pp, z, color="#9fb3c8", lw=1.3, ls=(0, (4, 2)),
+                        alpha=0.4 if sel else 1.0,
+                        label=f"Tras el 1.er mes calculado (mes {mes_pp})")
             for r in cols:
                 k = r + 3
                 ano = Dib[1, k] / 12.0
@@ -844,7 +866,7 @@ class Ventana(QMainWindow):
             if cols:
                 sm = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
                 cb = lz.fig.colorbar(sm, ax=ax, pad=0.015, fraction=0.04)
-                cb.set_label("Perfil en el año", color=CANVAS_FG, fontsize=8)
+                cb.set_label("Perfiles de salida: año", color=CANVAS_FG, fontsize=8)
                 cb.ax.tick_params(colors=CANVAS_FG, labelsize=7)
                 cb.outline.set_edgecolor("#5a6270")
             for r in sel:
