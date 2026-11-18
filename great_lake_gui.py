@@ -2,7 +2,9 @@
 """
 Great Lake - herramienta grafica para el modelo de recesion de acantilados.
 
-Interfaz de escritorio (PySide6 + matplotlib) sobre ``great_lake.py``:
+Interfaz de escritorio (PySide6 + matplotlib) sobre ``great_lake_motor.py``
+(el motor de la herramienta: ``great_lake.py`` mas opciones adicionales; con
+las opciones por defecto da los mismos resultados que el original):
 
 * Carga y guarda ficheros ``data.dat``.
 * Edicion del perfil inicial, de los parametros y de los estratos, con
@@ -45,7 +47,7 @@ from matplotlib.backends.backend_qtagg import NavigationToolbar2QT  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import great_lake as gl  # noqa: E402
+import great_lake_motor as gl  # noqa: E402
 
 APP_NAME = "Great Lake - Recesión de acantilados"
 ACCENT = "#B5651D"
@@ -143,11 +145,12 @@ class Worker(QObject):
     terminado = Signal(object, float)
     error = Signal(str)
 
-    def __init__(self, workdir, seasons, nivel_lago=None):
+    def __init__(self, workdir, seasons, nivel_lago=None, estabilidad=None):
         super().__init__()
         self.workdir = workdir
         self.seasons = seasons
         self.nivel_lago = nivel_lago
+        self.estabilidad = estabilidad
         self._cancelar = False
 
     def cancelar(self):
@@ -166,7 +169,7 @@ class Worker(QObject):
 
         try:
             res = gl.run(self.workdir, verbose=False, progress=prog, seasons=self.seasons,
-                         nivel_lago=self.nivel_lago)
+                         nivel_lago=self.nivel_lago, estabilidad=self.estabilidad)
             res["nivel_lago"] = self.nivel_lago
         except gl.Cancelled:
             self.error.emit("Cálculo detenido por el usuario.")
@@ -579,6 +582,35 @@ class Ventana(QMainWindow):
               [("groundwater", "Tipo", cb_gw),
                ("profagua", "Profundidad tierra adentro [m]", SciEdit())])
         grupo("Derrubios", [("Mf", "Coef. de movilidad [m²/día]", SciEdit())])
+
+        g = QGroupBox("Estabilidad de taludes (opciones de la herramienta)")
+        f = QFormLayout(g)
+        self.cb_metodo = QComboBox()
+        for clave, nombre in (("fellenius", "Fellenius (original)"),
+                              ("bishop", "Bishop simplificado"),
+                              ("spencer", "Spencer (riguroso)")):
+            self.cb_metodo.addItem(nombre, clave)
+        self.sp_rebanadas = QSpinBox()
+        self.sp_rebanadas.setRange(1, 200)
+        self.sp_rebanadas.setValue(5)
+        self.cb_criterio = QComboBox()
+        for clave, nombre in (("todas", "Todas las inestables (original)"),
+                              ("profunda", "La más profunda (tesis)"),
+                              ("minimo", "La de menor FS")):
+            self.cb_criterio.addItem(nombre, clave)
+        f.addRow("Método", self.cb_metodo)
+        f.addRow("Nº de rebanadas", self.sp_rebanadas)
+        f.addRow("Criterio de rotura", self.cb_criterio)
+        b = QPushButton("Valores del original")
+        b.clicked.connect(self._estabilidad_original)
+        f.addRow("", b)
+        self.lb_aviso_estab = QLabel("", objectName="note")
+        self.lb_aviso_estab.setWordWrap(True)
+        f.addRow(self.lb_aviso_estab)
+        for w_ in (self.cb_metodo, self.cb_criterio):
+            w_.currentIndexChanged.connect(self._cambio_estabilidad)
+        self.sp_rebanadas.valueChanged.connect(self._cambio_estabilidad)
+        v.addWidget(g)
         v.addStretch(1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -757,8 +789,8 @@ class Ventana(QMainWindow):
         # --- Roturas
         w = QWidget()
         v = QVBoxLayout(w)
-        self.tb_roturas = QTableWidget(0, 3)
-        self.tb_roturas.setHorizontalHeaderLabels(["Mes", "Año", "Volumen (m³/m)"])
+        self.tb_roturas = QTableWidget(0, 4)
+        self.tb_roturas.setHorizontalHeaderLabels(["Mes", "Año", "Volumen (m³/m)", "FS"])
         self.tb_roturas.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tb_roturas.verticalHeader().setVisible(False)
         self.tb_roturas.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -866,6 +898,7 @@ class Ventana(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         self.mostrar_oleaje()
         self._cambio_opciones_nivel()
+        self._cambio_estabilidad()
 
     # ------------------------------------------------------- datos <-> UI
     def cargar_datos(self, d):
@@ -1204,9 +1237,11 @@ class Ventana(QMainWindow):
 
         tr = self.tb_roturas
         tr.setRowCount(0)
+        fss = r.get("roturas_fs", [])
         for i, (mes, vol, _, _) in enumerate(r["roturas"]):
             tr.insertRow(i)
-            for k, val in enumerate((f"{mes}", f"{mes / 12:.1f}", f"{vol:.3f}")):
+            fs_txt = f"{fss[i]:.3f}" if i < len(fss) else ""
+            for k, val in enumerate((f"{mes}", f"{mes / 12:.1f}", f"{vol:.3f}", fs_txt)):
                 c = QTableWidgetItem(val)
                 c.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 tr.setItem(i, k, c)
@@ -1518,6 +1553,35 @@ class Ventana(QMainWindow):
         self.serie_nivel = None
         self.dibujar_nivel()
 
+    def opciones_estabilidad(self):
+        """Opciones de estabilidad para gl.run (None = como el original)."""
+        op = {"metodo": self.cb_metodo.currentData(),
+              "rebanadas": self.sp_rebanadas.value(),
+              "criterio": self.cb_criterio.currentData()}
+        if op == {"metodo": "fellenius", "rebanadas": 5, "criterio": "todas"}:
+            return None
+        return op
+
+    def _estabilidad_original(self):
+        self.cb_metodo.setCurrentIndex(0)
+        self.sp_rebanadas.setValue(5)
+        self.cb_criterio.setCurrentIndex(0)
+
+    def _cambio_estabilidad(self, *_):
+        op = self.opciones_estabilidad()
+        if op is None:
+            self.lb_aviso_estab.setText(
+                "Como el modelo original (Fellenius, 5 rebanadas, todas las roturas "
+                "inestables): resultados idénticos al Fortran.")
+            self.lb_aviso_estab.setStyleSheet("")
+        else:
+            extra = (" Spencer tarda unas 2-3 veces más que Bishop."
+                     if op["metodo"] == "spencer" else "")
+            self.lb_aviso_estab.setText(
+                "⚠ Opciones distintas del original: los resultados ya no coinciden con el "
+                "Fortran ni con la tesis (calibrada con Fellenius)." + extra)
+            self.lb_aviso_estab.setStyleSheet("color: #b0451d;")
+
     def opciones_nivel(self):
         """Opciones de nivel variable para gl.run (None = constante, como el original)."""
         if not hasattr(self, "ck_estacional"):
@@ -1752,7 +1816,8 @@ class Ventana(QMainWindow):
 
         self.hilo = QThread()
         seasons = None if self.seasons == gl.SEASONS else copy.deepcopy(self.seasons)
-        self.worker = Worker(self.res_dir, seasons, self.opciones_nivel())
+        self.worker = Worker(self.res_dir, seasons, self.opciones_nivel(),
+                             self.opciones_estabilidad())
         self.worker.moveToThread(self.hilo)
         self.hilo.started.connect(self.worker.run)
         self.worker.progreso.connect(self._progreso)
@@ -1784,9 +1849,13 @@ class Ventana(QMainWindow):
         self.lb_resdir.setText(f"Resultados guardados en: {self.res_dir}")
         self.mostrar_resultados()
         self.tabs_datos.setCurrentIndex(3)
+        est = res.get("estabilidad", {})
+        nombres = {"fellenius": "Fellenius", "bishop": "Bishop", "spencer": "Spencer"}
+        txt_est = (f"{nombres.get(est.get('metodo'), '?')}, {est.get('rebanadas')} rebanadas, "
+                   f"criterio «{est.get('criterio')}»")
         self.statusBar().showMessage(
             f"Cálculo terminado en {segundos:.1f} s · {len(res['roturas'])} roturas · "
-            f"salidas en {self.res_dir}")
+            f"estabilidad: {txt_est} · salidas en {self.res_dir}")
 
     def _error(self, msg):
         self._fin_hilo()

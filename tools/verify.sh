@@ -16,5 +16,11 @@ cp "$CASE/data.dat" "$WORK/fortran/"; cp "$CASE/data.dat" "$WORK/python/"
 grep -vE "Great_lake_v.1|Time steep|tiempo CPU" "$WORK/fortran/Matriz_roturas.out" > "$WORK/tmp" || true
 mv "$WORK/tmp" "$WORK/fortran/Matriz_roturas.out"
 python3 "$ROOT/great_lake.py" "$WORK/python" > /dev/null
+echo "== Fortran vs great_lake.py (traduccion fiel)"
 python3 "$ROOT/tools/compare_outputs.py" "$WORK/fortran" "$WORK/python"
+# El motor de la herramienta, con las opciones por defecto, debe dar lo mismo
+mkdir -p "$WORK/motor"; cp "$CASE/data.dat" "$WORK/motor/"
+python3 "$ROOT/great_lake_motor.py" "$WORK/motor" > /dev/null
+echo "== great_lake.py vs great_lake_motor.py (motor de la herramienta, opciones por defecto)"
+python3 "$ROOT/tools/compare_outputs.py" "$WORK/python" "$WORK/motor"
 echo "Resultados en: $WORK"
