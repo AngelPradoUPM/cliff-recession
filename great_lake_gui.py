@@ -48,6 +48,7 @@ from matplotlib.figure import Figure  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import great_lake_motor as gl  # noqa: E402
+from ayuda_parametros import AYUDA  # noqa: E402
 
 APP_NAME = "Great Lake - Recesión de acantilados"
 ACCENT = "#B5651D"
@@ -102,15 +103,22 @@ QLabel#note {{ color: #666; font-size: 9pt; }}
 # Datos por defecto (caso nuevo)
 # ---------------------------------------------------------------------------
 def caso_por_defecto():
-    d = dict(rn=1, Utsim=2, tsim=10, UTdib=2, Tdib=1, Dz=0.1, lakelevel=0,
-             Qb=0.0, Gs=0.001, groundwater=0, profagua=1.0, ndatosresis=1,
+    """Caso con el que arranca la herramienta: el caso simple realista.
+
+    Acantilado de 10 m a 45 grados (estable al inicio), 20 anos, playa pequena,
+    nivel freatico y dos estratos, con parametros dentro de los rangos del
+    capitulo 10 de la tesis (igual que ejemplos/caso_simple/data.dat).
+    """
+    d = dict(rn=1, Utsim=2, tsim=20, UTdib=2, Tdib=1, Dz=0.1, lakelevel=0,
+             Qb=5.0, Gs=0.001, groundwater=1, profagua=4.0, ndatosresis=2,
              SFmin=5.0, Kss=2.4e-6, p=1.0, WFmin=70.0, MMM=1e-8,
-             Rsc=5.0, Cb=1e-7, KRs=1.0, Bmat=1.0, Mf=2.9)
-    for nm, v in (("sigmac", 200.0), ("Shearstrength", 8.0), ("Ecohesion", 23.0),
-                  ("Ephi", 25.0), ("pesounit", 23.4), ("potestrato", 120.0)):
-        d[nm] = np.array([0.0, v])
-    d["Pzy"] = [[15.0000001, -500.0, 0.0], [15.0000001, -6.1, 3.0],
-                [15.0000001, -6.0, 2.0], [0.0, 0.0, 4.0], [-60.0, 1500.0, 0.0]]
+             Rsc=5.0, Cb=1e-7, KRs=1.0, Bmat=1.0, Mf=2.0)
+    for nm, v in (("sigmac", (200.0, 200.0)), ("Shearstrength", (8.0, 8.0)),
+                  ("Ecohesion", (15.0, 23.0)), ("Ephi", (25.0, 25.0)),
+                  ("pesounit", (20.0, 21.0)), ("potestrato", (4.0, 100.0))):
+        d[nm] = np.array([0.0, *v])
+    d["Pzy"] = [[10.0000001, -500.0, 0.0], [10.0000001, -10.0, 2.0], [5.0, -5.0, 3.0],
+                [2.0, -2.0, 1.0], [0.0, 0.0, 4.0], [-50.0, 1250.0, 0.0]]
     return d
 
 
@@ -251,6 +259,79 @@ class Lienzo(FigureCanvas):
             ax.grid(True, color="#e6e6e6", lw=0.6)
             for s in ("top", "right"):
                 ax.spines[s].set_visible(False)
+
+
+class InfoBoton(QToolButton):
+    """Boton (i) que despliega una explicacion sencilla y, debajo, la detallada."""
+
+    def __init__(self, clave, parent=None):
+        super().__init__(parent)
+        self.clave = clave
+        self.setText("i")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Qué es esto")
+        self.setFixedSize(18, 18)
+        self.setStyleSheet(
+            "QToolButton { background: #e7eef8; color: #1e66c8; border: 1px solid #9dbbe6;"
+            " border-radius: 9px; font-weight: bold; font-family: serif; font-size: 9pt;"
+            " padding: 0; }"
+            "QToolButton:hover { background: #1e88e5; color: white; border-color: #1e88e5; }")
+        self.clicked.connect(self.mostrar)
+        self._popup = None
+
+    def mostrar(self):
+        sencillo, detalle = AYUDA.get(self.clave, ("(Sin ayuda)", None))
+        pop = QFrame(self, Qt.Popup)
+        pop.setObjectName("infopopup")
+        pop.setStyleSheet(
+            "#infopopup { background: white; border: 1px solid #9dbbe6; border-radius: 6px; }"
+            "QLabel { background: transparent; }")
+        lay = QVBoxLayout(pop)
+        lay.setContentsMargins(12, 10, 12, 10)
+        lay.setSpacing(6)
+        l1 = QLabel(sencillo)
+        l1.setWordWrap(True)
+        l1.setStyleSheet("font-size: 10pt; font-weight: bold; color: #1d2a3a;")
+        lay.addWidget(l1)
+        if detalle:
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            sep.setStyleSheet("color: #dfe6ef;")
+            lay.addWidget(sep)
+            titulo = QLabel("En detalle")
+            titulo.setStyleSheet(f"font-size: 8pt; font-weight: bold; color: {ACCENT_DARK};"
+                                 " text-transform: uppercase;")
+            lay.addWidget(titulo)
+            l2 = QLabel(detalle)
+            l2.setWordWrap(True)
+            l2.setTextFormat(Qt.RichText)
+            l2.setStyleSheet("font-size: 9pt; color: #3a4554;")
+            lay.addWidget(l2)
+        pop.setFixedWidth(420)
+        pop.adjustSize()
+        # debajo del boton, sin salirse de la pantalla
+        pos = self.mapToGlobal(self.rect().bottomLeft())
+        pantalla = self.screen().availableGeometry() if self.screen() else None
+        x, y = pos.x() - 10, pos.y() + 4
+        if pantalla is not None:
+            x = max(pantalla.left() + 4, min(x, pantalla.right() - pop.width() - 4))
+            if y + pop.height() > pantalla.bottom():
+                y = self.mapToGlobal(self.rect().topLeft()).y() - pop.height() - 4
+        pop.move(x, y)
+        pop.show()
+        self._popup = pop
+
+
+def etiqueta_info(texto, clave):
+    """Etiqueta de un formulario con su boton (i) a la derecha."""
+    w = QWidget()
+    h = QHBoxLayout(w)
+    h.setContentsMargins(0, 0, 0, 0)
+    h.setSpacing(5)
+    h.addWidget(QLabel(texto))
+    h.addWidget(InfoBoton(clave))
+    h.addStretch(1)
+    return w
 
 
 class LineaTemporal(QWidget):
@@ -409,6 +490,7 @@ class Ventana(QMainWindow):
             self.abrir(ruta)
         else:
             self.cargar_datos(caso_por_defecto())
+            self.dibujar_grafica()
 
     # ------------------------------------------------------------------ UI
     def _crear_barra(self):
@@ -526,6 +608,7 @@ class Ventana(QMainWindow):
         fila.addWidget(b_del)
         fila.addWidget(b_ord)
         fila.addStretch(1)
+        fila.addWidget(etiqueta_info("Ayuda", "perfil"))
         v.addLayout(fila)
         self.tb_perfil = QTableWidget(0, 3)
         self.tb_perfil.setHorizontalHeaderLabels(["Cota z (m)", "Distancia y (m)", "Punto"])
@@ -551,7 +634,7 @@ class Ventana(QMainWindow):
             f = QFormLayout(g)
             for clave, etiqueta, widget in filas:
                 self.campos[clave] = widget
-                f.addRow(etiqueta, widget)
+                f.addRow(etiqueta_info(etiqueta, clave) if clave in AYUDA else etiqueta, widget)
                 if isinstance(widget, QComboBox):
                     widget.currentIndexChanged.connect(self._cambio_datos)
                 else:
@@ -598,9 +681,9 @@ class Ventana(QMainWindow):
                               ("profunda", "La más profunda (tesis)"),
                               ("minimo", "La de menor FS")):
             self.cb_criterio.addItem(nombre, clave)
-        f.addRow("Método", self.cb_metodo)
-        f.addRow("Nº de rebanadas", self.sp_rebanadas)
-        f.addRow("Criterio de rotura", self.cb_criterio)
+        f.addRow(etiqueta_info("Método", "metodo"), self.cb_metodo)
+        f.addRow(etiqueta_info("Nº de rebanadas", "rebanadas"), self.sp_rebanadas)
+        f.addRow(etiqueta_info("Criterio de rotura", "criterio"), self.cb_criterio)
         b = QPushButton("Valores del original")
         b.clicked.connect(self._estabilidad_original)
         f.addRow("", b)
@@ -628,6 +711,7 @@ class Ventana(QMainWindow):
         fila.addWidget(b_add)
         fila.addWidget(b_del)
         fila.addStretch(1)
+        fila.addWidget(etiqueta_info("Ayuda", "estratos"))
         v.addLayout(fila)
         self.tb_estratos = QTableWidget(0, 6)
         self.tb_estratos.setHorizontalHeaderLabels(

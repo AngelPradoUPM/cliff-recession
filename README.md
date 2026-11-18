@@ -104,6 +104,14 @@ python great_lake_gui.py ejemplos/caso_simple/data.dat
 
 ![Herramienta gráfica con el caso base](docs/captura_gui.png)
 
+Si se abre sin indicar ningún `data.dat`, la herramienta carga el caso simple
+realista (el mismo que `ejemplos/caso_simple`) como plantilla.
+
+Cada parámetro tiene un botón **(i)**. Al pulsarlo se despliega primero una
+explicación sencilla y, debajo, el detalle cuando hace falta: la fórmula en la
+que interviene, los valores de referencia de la tesis y cómo lo usa el código.
+Los textos están en `ayuda_parametros.py`.
+
 - **Panel «Datos»** (izquierda):
   - edición del perfil inicial (cota, distancia y tipo de punto);
   - edición de los parámetros y de los estratos;
