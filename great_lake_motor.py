@@ -2005,6 +2005,10 @@ if __name__ == "__main__":
     ap.add_argument("--subida-mar", type=float, default=MAR_TESIS["subida_mm_ano"],
                     help="subida del nivel del mar en mm/ano (modo mar; tesis: 6)")
     a = ap.parse_args()
+    if not os.path.isfile(os.path.join(a.directorio, "data.dat")):
+        sys.exit(f"No se encuentra data.dat en «{os.path.abspath(a.directorio)}».\n"
+                 "Uso: python great_lake_motor.py CARPETA_CON_DATA_DAT [opciones]\n"
+                 "Ejemplo: python great_lake_motor.py ejemplos/caso_mar --mar --erosion castedo")
     nl = None
     if a.nivel_estacional or a.nivel_interanual:
         nl = {"estacional": NIVEL_ESTACIONAL_TESIS if a.nivel_estacional else None,

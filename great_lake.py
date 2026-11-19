@@ -1239,4 +1239,8 @@ def run(workdir=".", verbose=True):
 
 if __name__ == "__main__":
     wd = sys.argv[1] if len(sys.argv) > 1 else "."
+    if not os.path.isfile(os.path.join(wd, "data.dat")):
+        sys.exit(f"No se encuentra data.dat en «{os.path.abspath(wd)}».\n"
+                 "Uso: python great_lake.py CARPETA_CON_DATA_DAT\n"
+                 "Ejemplo: python great_lake.py ejemplos/caso_simple")
     run(wd)
