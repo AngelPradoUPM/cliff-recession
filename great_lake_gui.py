@@ -1430,7 +1430,7 @@ class Ventana(QMainWindow):
         else:
             ax.axhline(zlago, color="#4fa3e0", lw=1.2, ls="-",
                        label=f"Nivel del lago ({zlago:.2f} m)")
-        ax.plot(y0, z, color="#f0f0f0", lw=1.8, label="Perfil inicial (año 0, datos)")
+        ax.plot(y0, z, color="#f0f0f0", lw=1.8, zorder=4, label="Perfil inicial (año 0, datos)")
         ax.plot([p[1] for p in d["Pzy"]], [p[0] for p in d["Pzy"]], "o", ms=3.5,
                 color="#bbbbbb", alpha=0.8, label="_vertices")
 
@@ -1512,8 +1512,11 @@ class Ventana(QMainWindow):
             H = max(1.0, abs(P[1, kc] - P[1, kb]))
             tramo = slice(kc, kt + 1)
             ys = [float(np.min(P[2, tramo]))]
-            if hay_res:
-                ys.append(float(np.min(self.res["DibMatriz"][kc + 1:kt + 2, 3:])))
+            # mismo encuadre para todos los métodos calculados, para que al
+            # cambiar de resultado no cambie la escala horizontal
+            for r_ in ([x["res"] for x in self.resultados] if hay_res else []):
+                if r_["meta"]["N"] == N and r_["DibMatriz"].shape[1] > 3:
+                    ys.append(float(np.min(r_["DibMatriz"][kc + 1:kt + 2, 3:])))
             x0 = min(ys) - 0.5 * H
             x1 = float(np.max(P[2, kc:kb + 1])) + 1.5 * H
             ax.set_xlim(x0, x1)
