@@ -149,18 +149,20 @@ def curva_freatica(P, seep, profagua):
 # ---------------------------------------------------------------------------
 # Calculo en segundo plano
 # ---------------------------------------------------------------------------
+NOMBRES_EROSION = {"trenhaile": "Trenhaile", "castedo": "Castedo"}
+NOMBRES_ESTABILIDAD = {"fellenius": "Fellenius", "bishop": "Bishop", "spencer": "Spencer"}
+
+
 class Worker(QObject):
-    progreso = Signal(int, int)
+    """Ejecuta en segundo plano uno o varios calculos (uno por combinacion)."""
+
+    progreso = Signal(int, int, int, int)   # calculo i (desde 1), n calculos, mes, tsim
     terminado = Signal(object, float)
     error = Signal(str)
 
-    def __init__(self, workdir, seasons, nivel_lago=None, estabilidad=None, mar=None):
+    def __init__(self, configs):
         super().__init__()
-        self.workdir = workdir
-        self.seasons = seasons
-        self.nivel_lago = nivel_lago
-        self.estabilidad = estabilidad
-        self.mar = mar
+        self.configs = configs
         self._cancelar = False
 
     def cancelar(self):
@@ -168,27 +170,35 @@ class Worker(QObject):
 
     def run(self):
         t0 = time.time()
-        last = [0.0]
+        resultados = []
+        n = len(self.configs)
+        for i, c in enumerate(self.configs, start=1):
+            last = [0.0]
 
-        def prog(t, tsim):
-            now = time.time()
-            if now - last[0] > 0.05 or t >= tsim:
-                last[0] = now
-                self.progreso.emit(t, tsim)
-            return not self._cancelar
+            def prog(t, tsim, i=i):
+                now = time.time()
+                if now - last[0] > 0.05 or t >= tsim:
+                    last[0] = now
+                    self.progreso.emit(i, n, t, tsim)
+                return not self._cancelar
 
-        try:
-            res = gl.run(self.workdir, verbose=False, progress=prog, seasons=self.seasons,
-                         nivel_lago=self.nivel_lago, estabilidad=self.estabilidad,
-                         mar=self.mar)
-            res["nivel_lago"] = self.nivel_lago
-        except gl.Cancelled:
-            self.error.emit("Cálculo detenido por el usuario.")
-            return
-        except Exception as exc:  # noqa: BLE001
-            self.error.emit(f"El cálculo ha fallado:\n{type(exc).__name__}: {exc}")
-            return
-        self.terminado.emit(res, time.time() - t0)
+            t1 = time.time()
+            try:
+                res = gl.run(c["dir"], verbose=False, progress=prog, seasons=c["seasons"],
+                             nivel_lago=c["nivel_lago"], estabilidad=c["estabilidad"],
+                             mar=c["mar"], erosion=c["erosion"])
+                res["nivel_lago"] = c["nivel_lago"]
+            except gl.Cancelled:
+                self.error.emit("Cálculo detenido por el usuario.")
+                return
+            except Exception as exc:  # noqa: BLE001
+                self.error.emit(f"El cálculo «{c['nombre']}» ha fallado:\n"
+                                f"{type(exc).__name__}: {exc}")
+                return
+            resultados.append({"nombre": c["nombre"], "erosion": c["clave_erosion"],
+                               "estabilidad": c["clave_estabilidad"], "dir": c["dir"],
+                               "res": res, "segundos": time.time() - t1})
+        self.terminado.emit(resultados, time.time() - t0)
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +561,7 @@ class Ventana(QMainWindow):
         self.serie_nivel = None
         self.modo = "lago"
         self._eventos = []
+        self.resultados = []
         self.seasons_por_modo = {"lago": copy.deepcopy(gl.SEASONS),
                                  "mar": copy.deepcopy(gl.SEASONS_MAR)}
         self._bloqueo = False
@@ -757,13 +768,39 @@ class Ventana(QMainWindow):
                ("profagua", "Profundidad tierra adentro [m]", SciEdit())])
         grupo("Derrubios", [("Mf", "Coef. de movilidad [m²/día]", SciEdit())])
 
-        g = QGroupBox("Estabilidad de taludes (opciones de la herramienta)")
+        g = QGroupBox("Métodos de cálculo (marca uno o varios para compararlos)")
         f = QFormLayout(g)
-        self.cb_metodo = QComboBox()
-        for clave, nombre in (("fellenius", "Fellenius (original)"),
-                              ("bishop", "Bishop simplificado"),
-                              ("spencer", "Spencer (riguroso)")):
-            self.cb_metodo.addItem(nombre, clave)
+        self.ck_ero = {}
+        fila_e = QWidget()
+        he = QHBoxLayout(fila_e)
+        he.setContentsMargins(0, 0, 0, 0)
+        for clave, texto, ayuda in (("trenhaile", "Trenhaile (original del lago)", "erosion_trenhaile"),
+                                    ("castedo", "Castedo (marina, tesis)", "erosion_castedo")):
+            ck = QCheckBox(texto)
+            ck.toggled.connect(self._cambio_estabilidad)
+            self.ck_ero[clave] = ck
+            he.addWidget(ck)
+            he.addWidget(InfoBoton(ayuda))
+            he.addSpacing(8)
+        he.addStretch(1)
+        self.ck_ero["trenhaile"].setChecked(True)
+        f.addRow(etiqueta_info("Erosión", "erosion"), fila_e)
+        self.ck_est = {}
+        fila_s = QWidget()
+        hs = QHBoxLayout(fila_s)
+        hs.setContentsMargins(0, 0, 0, 0)
+        for clave, texto, ayuda in (("fellenius", "Fellenius (original)", "estab_fellenius"),
+                                    ("bishop", "Bishop", "estab_bishop"),
+                                    ("spencer", "Spencer", "estab_spencer")):
+            ck = QCheckBox(texto)
+            ck.toggled.connect(self._cambio_estabilidad)
+            self.ck_est[clave] = ck
+            hs.addWidget(ck)
+            hs.addWidget(InfoBoton(ayuda))
+            hs.addSpacing(8)
+        hs.addStretch(1)
+        self.ck_est["fellenius"].setChecked(True)
+        f.addRow(etiqueta_info("Estabilidad", "metodo"), fila_s)
         self.sp_rebanadas = QSpinBox()
         self.sp_rebanadas.setRange(1, 200)
         self.sp_rebanadas.setValue(5)
@@ -772,7 +809,6 @@ class Ventana(QMainWindow):
                               ("profunda", "La más profunda (tesis)"),
                               ("minimo", "La de menor FS")):
             self.cb_criterio.addItem(nombre, clave)
-        f.addRow(etiqueta_info("Método", "metodo"), self.cb_metodo)
         f.addRow(etiqueta_info("Nº de rebanadas", "rebanadas"), self.sp_rebanadas)
         f.addRow(etiqueta_info("Criterio de rotura", "criterio"), self.cb_criterio)
         b = QPushButton("Valores del original")
@@ -781,9 +817,27 @@ class Ventana(QMainWindow):
         self.lb_aviso_estab = QLabel("", objectName="note")
         self.lb_aviso_estab.setWordWrap(True)
         f.addRow(self.lb_aviso_estab)
-        for w_ in (self.cb_metodo, self.cb_criterio):
-            w_.currentIndexChanged.connect(self._cambio_estabilidad)
+        self.cb_criterio.currentIndexChanged.connect(self._cambio_estabilidad)
         self.sp_rebanadas.valueChanged.connect(self._cambio_estabilidad)
+        v.addWidget(g)
+
+        g = QGroupBox("Erosión de Castedo (si está marcada)")
+        f = QFormLayout(g)
+        self.sp_K = dspin(0.01, 1e7, 2, 10, "")
+        self.sp_K.setValue(gl.CASTEDO_DEFECTO["K"])
+        self.sp_pmax = dspin(5, 89, 1, 5, "°")
+        self.sp_pmax.setValue(gl.CASTEDO_DEFECTO["pendiente_max"])
+        self.sp_fdesl = dspin(0, 100, 0, 5, "%")
+        self.sp_fdesl.setValue(100 * gl.CASTEDO_DEFECTO["derrubios_deslizamiento"])
+        self.sp_fvuel = dspin(0, 100, 0, 5, "%")
+        self.sp_fvuel.setValue(100 * gl.CASTEDO_DEFECTO["derrubios_vuelco"])
+        f.addRow(etiqueta_info("Constante de calibración K", "castedo_K"), self.sp_K)
+        f.addRow(etiqueta_info("Pendiente máxima", "castedo_pendiente"), self.sp_pmax)
+        f.addRow(etiqueta_info("Derrubios de un deslizamiento", "castedo_derrubios"), self.sp_fdesl)
+        f.addRow(etiqueta_info("Derrubios de un vuelco", "castedo_derrubios"), self.sp_fvuel)
+        b = QPushButton("Valores de la tesis (Holderness)")
+        b.clicked.connect(self._castedo_tesis)
+        f.addRow("", b)
         v.addWidget(g)
         v.addStretch(1)
         scroll = QScrollArea()
@@ -820,6 +874,15 @@ class Ventana(QMainWindow):
         # --- Resultados (perfiles por instante de salida)
         w = QWidget()
         v = QVBoxLayout(w)
+        self.fila_resultado = QWidget()
+        fr = QHBoxLayout(self.fila_resultado)
+        fr.setContentsMargins(0, 0, 0, 0)
+        fr.addWidget(QLabel("Cálculo mostrado:"))
+        self.cb_resultado = QComboBox()
+        self.cb_resultado.currentIndexChanged.connect(self._elegir_resultado)
+        fr.addWidget(self.cb_resultado, 1)
+        self.fila_resultado.setVisible(False)
+        v.addWidget(self.fila_resultado)
         fila = QHBoxLayout()
         b_todos = QPushButton("Ver todos")
         b_todos.clicked.connect(lambda: self._marcar_salidas(True))
@@ -961,6 +1024,45 @@ class Ventana(QMainWindow):
         v.addLayout(fila)
         tabs.addTab(w, "Recesión")
 
+        # --- Comparacion de metodos
+        w = QWidget()
+        v = QVBoxLayout(w)
+        fila = QHBoxLayout()
+        fila.addWidget(etiqueta_info("Comparación de los cálculos", "comparacion"))
+        fila.addStretch(1)
+        v.addLayout(fila)
+        self.tb_comp = QTableWidget(0, 7)
+        self.tb_comp.setHorizontalHeaderLabels(
+            ["Erosión", "Estabilidad", "Desliz.", "Vuelcos", "Cresta\n(m/año)",
+             "Nivel agua\n(m/año)", "Tiempo\n(s)"])
+        self.tb_comp.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tb_comp.verticalHeader().setVisible(False)
+        self.tb_comp.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tb_comp.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tb_comp.setMaximumHeight(190)
+        self.tb_comp.itemSelectionChanged.connect(self._fila_comparacion)
+        v.addWidget(self.tb_comp)
+        fila = QHBoxLayout()
+        fila.addWidget(QLabel("Gráfica:"))
+        self.cb_comp = QComboBox()
+        self.cb_comp.addItems(["Retroceso de la cresta", "Retroceso en el nivel del agua",
+                               "Volumen de roturas acumulado", "Perfil final"])
+        self.cb_comp.currentIndexChanged.connect(self.dibujar_comparacion)
+        fila.addWidget(self.cb_comp, 1)
+        v.addLayout(fila)
+        self.graf_comp = Lienzo()
+        v.addWidget(self.graf_comp, 1)
+        fila = QHBoxLayout()
+        fila.addStretch(1)
+        b = QPushButton("Guardar figura…")
+        b.clicked.connect(lambda: self.guardar_figura(self.graf_comp.fig))
+        fila.addWidget(b)
+        b = QPushButton("Exportar tabla CSV…")
+        b.clicked.connect(self.exportar_comparacion)
+        fila.addWidget(b)
+        v.addLayout(fila)
+        tabs.addTab(w, "Comparación")
+
         # --- Roturas
         w = QWidget()
         v = QVBoxLayout(w)
@@ -1005,6 +1107,13 @@ class Ventana(QMainWindow):
         b = QPushButton("Restablecer originales")
         b.clicked.connect(self.restablecer_oleaje)
         fila.addWidget(b)
+        self.b_temporales = QPushButton("Con temporales (ilustrativo)")
+        self.b_temporales.setToolTip("Distribución de olas con temporales cuya altura media "
+                                     "coincide con la de Holderness; útil para la erosión de "
+                                     "Trenhaile, que solo actúa por encima de unos umbrales.")
+        self.b_temporales.clicked.connect(self._oleaje_temporales)
+        self.b_temporales.setVisible(False)
+        fila.addWidget(self.b_temporales)
         v.addLayout(fila)
         self.tb_oleaje = QTableWidget(0, 3)
         self.tb_oleaje.setHorizontalHeaderLabels(["H (m)", "T (s)", "Frecuencia (%)"])
@@ -1106,7 +1215,8 @@ class Ventana(QMainWindow):
         self.lb_nivel = QLabel("", objectName="note")
         self.lb_nivel.setWordWrap(True)
         v.addWidget(self.lb_nivel)
-        tabs.addTab(w, "Nivel / mareas")
+        tabs.addTab(w, "Nivel")
+        tabs.setTabToolTip(tabs.count() - 1, "Nivel del lago / mareas")
 
         self.tabs_der = tabs
         dock.setWidget(tabs)
@@ -1491,7 +1601,8 @@ class Ventana(QMainWindow):
                 tr.setItem(i, k, c)
         n_d = len(r["roturas"])
         n_v = len(r.get("vuelcos", []))
-        self.tabs_der.setTabText(1, f"Roturas ({n_d} + {n_v} vuelcos)")
+        self.tabs_der.setTabText(2, f"Roturas ({n_d}+{n_v})")
+        self.tabs_der.setTabToolTip(2, f"{n_d} deslizamientos y {n_v} vuelcos")
         self._set_invierno = set(r["mensual"]["invierno"])
         self._set_derrubios = set(r["mensual"]["derrubios"])
         self._roturas_mes = {}
@@ -1757,6 +1868,10 @@ class Ventana(QMainWindow):
             self.tb_oleaje.removeRow(r)
         self._cambio_oleaje()
 
+    def _oleaje_temporales(self):
+        self.seasons = copy.deepcopy(gl.SEASONS_MAR_TEMPORALES)
+        self.mostrar_oleaje()
+
     def restablecer_oleaje(self):
         self.seasons = copy.deepcopy(self._seasons_defecto())
         self.mostrar_oleaje()
@@ -1787,9 +1902,10 @@ class Ventana(QMainWindow):
                      "no coincidirán con el Fortran.")
         else:
             base = ("Modo mar: se calculan los 12 meses con el oleaje de su estación "
-                    "(invierno: ene-mar). Por defecto, distribución ilustrativa cuya altura "
-                    "media (≈1 m) coincide con la de Holderness según la tesis; conviene "
-                    "sustituirla por datos de una boya cercana.")
+                    "(invierno: ene-mar). Por defecto, la ola media de Holderness que usa la "
+                    "tesis (0,98 m, 7,66 s), adecuada para la erosión de Castedo. La de "
+                    "Trenhaile solo erosiona con olas grandes: para ella usa «Con temporales» "
+                    "o, mejor, datos de una boya cercana.")
             aviso = "\n⚠ Valores modificados respecto a los de por defecto del modo mar."
         self.lb_oleaje.setText(base + (aviso if modificado else ""))
         self.lb_oleaje.setStyleSheet("color: #b0451d;" if modificado else "")
@@ -1827,34 +1943,70 @@ class Ventana(QMainWindow):
         self.serie_nivel = None
         self.dibujar_nivel()
 
-    def opciones_estabilidad(self):
+    def metodos_elegidos(self):
+        ero = [k for k, ck in self.ck_ero.items() if ck.isChecked()]
+        est = [k for k, ck in self.ck_est.items() if ck.isChecked()]
+        return ero, est
+
+    def opciones_estabilidad(self, metodo="fellenius"):
         """Opciones de estabilidad para gl.run (None = como el original)."""
-        op = {"metodo": self.cb_metodo.currentData(),
-              "rebanadas": self.sp_rebanadas.value(),
+        op = {"metodo": metodo, "rebanadas": self.sp_rebanadas.value(),
               "criterio": self.cb_criterio.currentData()}
         if op == {"metodo": "fellenius", "rebanadas": 5, "criterio": "todas"}:
             return None
         return op
 
+    def opciones_erosion(self, metodo):
+        """Opciones de erosion para gl.run (None = Trenhaile, como el original)."""
+        if metodo != "castedo":
+            return None
+        return {"metodo": "castedo", "K": self.sp_K.value(),
+                "pendiente_max": self.sp_pmax.value(),
+                "derrubios_deslizamiento": self.sp_fdesl.value() / 100.0,
+                "derrubios_vuelco": self.sp_fvuel.value() / 100.0}
+
+    def _castedo_tesis(self):
+        self.sp_K.setValue(gl.CASTEDO_DEFECTO["K"])
+        self.sp_pmax.setValue(gl.CASTEDO_DEFECTO["pendiente_max"])
+        self.sp_fdesl.setValue(100 * gl.CASTEDO_DEFECTO["derrubios_deslizamiento"])
+        self.sp_fvuel.setValue(100 * gl.CASTEDO_DEFECTO["derrubios_vuelco"])
+
     def _estabilidad_original(self):
-        self.cb_metodo.setCurrentIndex(0)
+        for k, ck in self.ck_est.items():
+            ck.setChecked(k == "fellenius")
         self.sp_rebanadas.setValue(5)
         self.cb_criterio.setCurrentIndex(0)
 
     def _cambio_estabilidad(self, *_):
-        op = self.opciones_estabilidad()
-        if op is None:
-            self.lb_aviso_estab.setText(
-                "Como el modelo original (Fellenius, 5 rebanadas, todas las roturas "
-                "inestables): resultados idénticos al Fortran.")
-            self.lb_aviso_estab.setStyleSheet("")
-        else:
-            extra = (" Spencer tarda unas 2-3 veces más que Bishop."
-                     if op["metodo"] == "spencer" else "")
-            self.lb_aviso_estab.setText(
-                "⚠ Opciones distintas del original: los resultados ya no coinciden con el "
-                "Fortran ni con la tesis (calibrada con Fellenius)." + extra)
+        if not all(hasattr(self, x) for x in ("ck_est", "sp_rebanadas", "cb_criterio",
+                                               "lb_aviso_estab")):
+            return   # todavia se esta construyendo la ventana
+        ero, est = self.metodos_elegidos()
+        n = len(ero) * len(est)
+        if not ero or not est:
+            self.lb_aviso_estab.setText("⚠ Marca al menos un método de erosión y uno de "
+                                        "estabilidad.")
             self.lb_aviso_estab.setStyleSheet("color: #b0451d;")
+            return
+        partes = []
+        if n > 1:
+            partes.append(f"Se harán {n} cálculos, uno por combinación; se comparan en la "
+                          f"pestaña «Comparación».")
+        original = (ero == ["trenhaile"] and est == ["fellenius"]
+                    and self.sp_rebanadas.value() == 5
+                    and self.cb_criterio.currentData() == "todas")
+        if original and self.modo == "lago":
+            partes.append("Como el modelo original: resultados idénticos al Fortran.")
+        if "castedo" in ero:
+            partes.append("Castedo usa la resistencia a compresión (UCS) de los estratos y no "
+                          "usa los parámetros de Trenhaile (umbrales, run-up, playa).")
+        if "spencer" in est:
+            partes.append("Spencer tarda unas 1,5 veces más que Bishop.")
+        if not original and self.modo == "lago":
+            partes.append("⚠ Con métodos distintos del original los resultados no coinciden "
+                          "con el Fortran.")
+        self.lb_aviso_estab.setText(" ".join(partes))
+        self.lb_aviso_estab.setStyleSheet("color: #b0451d;" if "⚠" in " ".join(partes) else "")
 
     def opciones_mar(self):
         """Opciones del modo mar para gl.run (None en modo lago)."""
@@ -1872,14 +2024,21 @@ class Ventana(QMainWindow):
         """Cambia entre lago (modelo original) y mar (adaptacion con marea)."""
         if modo == self.modo and not limpiar:
             return
+        cambia = modo != self.modo
         self.modo = modo
         self.acciones_modo[modo].setChecked(True)
+        if cambia:
+            # metodo de erosion por defecto de cada modo
+            self.ck_ero["trenhaile"].setChecked(modo == "lago")
+            self.ck_ero["castedo"].setChecked(modo == "mar")
+        self.b_temporales.setVisible(modo == "mar")
         self.marca.setText("LAGO" if modo == "lago" else "MAR")
         self.lb_nivel_barra.setText("Nivel del lago:" if modo == "lago" else "Nivel medio del mar:")
         self.grp_nivel_lago.setVisible(modo == "lago")
         self.grp_marea.setVisible(modo == "mar")
         self.lb_leyenda_linea.setText(self._texto_leyenda())
         self._actualizar_titulo()
+        self._cambio_estabilidad()
         self.tb_salidas.setHorizontalHeaderLabels(
             ["Ver", "Mes", "Año",
              "Retroceso\nnivel lago (m)" if modo == "lago" else "Retroceso nivel\nmedio mar (m)",
@@ -2108,9 +2267,13 @@ class Ventana(QMainWindow):
             "modo": self.modo,
             "mar": {"amplitud": self.sp_amp.value(), "subida_mm_ano": self.sp_subida.value(),
                     "niveles": self.sp_nmarea.value()},
-            "estabilidad": {"metodo": self.cb_metodo.currentData(),
+            "estabilidad": {"metodos": self.metodos_elegidos()[1],
                             "rebanadas": self.sp_rebanadas.value(),
                             "criterio": self.cb_criterio.currentData()},
+            "erosion": {"metodos": self.metodos_elegidos()[0], "K": self.sp_K.value(),
+                        "pendiente_max": self.sp_pmax.value(),
+                        "derrubios_deslizamiento": self.sp_fdesl.value() / 100.0,
+                        "derrubios_vuelco": self.sp_fvuel.value() / 100.0},
             "nivel_lago": {"estacional": self.ck_estacional.isChecked(),
                            "interanual": self.ck_interanual.isChecked(),
                            "subidas": {k: sp.value() for k, sp in self.sp_estac.items()}},
@@ -2123,8 +2286,9 @@ class Ventana(QMainWindow):
         self.sp_subida.setValue(mar.get("subida_mm_ano", gl.MAR_TESIS["subida_mm_ano"]))
         self.sp_nmarea.setValue(mar.get("niveles", gl.MAR_TESIS["niveles"]))
         est = op.get("estabilidad", {})
-        i = self.cb_metodo.findData(est.get("metodo", "fellenius"))
-        self.cb_metodo.setCurrentIndex(max(0, i))
+        metodos = est.get("metodos", [est.get("metodo", "fellenius")])
+        for k, ck in self.ck_est.items():
+            ck.setChecked(k in metodos)
         self.sp_rebanadas.setValue(int(est.get("rebanadas", 5)))
         i = self.cb_criterio.findData(est.get("criterio", "todas"))
         self.cb_criterio.setCurrentIndex(max(0, i))
@@ -2141,6 +2305,16 @@ class Ventana(QMainWindow):
                     self.seasons_por_modo[m] = {k: tuple(list(x) for x in v)
                                                 for k, v in ole[m].items()}
         self.cambiar_modo(op.get("modo", "lago"))
+        ero = op.get("erosion", {})
+        if ero:
+            for k, ck in self.ck_ero.items():
+                ck.setChecked(k in ero.get("metodos", ["trenhaile"]))
+            self.sp_K.setValue(ero.get("K", gl.CASTEDO_DEFECTO["K"]))
+            self.sp_pmax.setValue(ero.get("pendiente_max", gl.CASTEDO_DEFECTO["pendiente_max"]))
+            self.sp_fdesl.setValue(100 * ero.get("derrubios_deslizamiento",
+                                                 gl.CASTEDO_DEFECTO["derrubios_deslizamiento"]))
+            self.sp_fvuel.setValue(100 * ero.get("derrubios_vuelco",
+                                                 gl.CASTEDO_DEFECTO["derrubios_vuelco"]))
 
     def _guardar_en(self, ruta):
         try:
@@ -2190,10 +2364,18 @@ class Ventana(QMainWindow):
     def _limpiar_resultados(self):
         self.res = None
         self._eventos = []
+        self.resultados = []
+        if hasattr(self, "cb_resultado"):
+            self.cb_resultado.blockSignals(True)
+            self.cb_resultado.clear()
+            self.cb_resultado.blockSignals(False)
+            self.fila_resultado.setVisible(False)
+            self.tb_comp.setRowCount(0)
+            self.dibujar_comparacion()
         self._activar_linea(False)
         self.tb_salidas.setRowCount(0)
         self.tb_roturas.setRowCount(0)
-        self.tabs_der.setTabText(1, "Roturas")
+        self.tabs_der.setTabText(2, "Roturas")
         self.lb_resdir.setText("Sin resultados. Pulsa «Calcular».")
         self.dibujar_perfil()
         self.dibujar_grafica()
@@ -2210,6 +2392,13 @@ class Ventana(QMainWindow):
             QMessageBox.warning(self, APP_NAME, f"Hay un dato no válido en las tablas: {exc}")
             return
         errores = self.validar(d)
+        ero, est = self.metodos_elegidos()
+        if not ero or not est:
+            errores.append("Marca al menos un método de erosión y uno de estabilidad "
+                           "(pestaña «Parámetros»).")
+        if "castedo" in ero and any(float(x) <= 0 for x in d["sigmac"][1:]):
+            errores.append("La erosión de Castedo necesita la resistencia a compresión (UCS) "
+                           "de todos los estratos.")
         if errores:
             QMessageBox.warning(self, APP_NAME, "Revisa los datos:\n\n• " + "\n• ".join(errores))
             return
@@ -2218,13 +2407,25 @@ class Ventana(QMainWindow):
         else:
             self.res_dir = os.path.join(os.path.expanduser("~"), "GreatLake", "resultados")
         os.makedirs(self.res_dir, exist_ok=True)
-        gl.write_data(os.path.join(self.res_dir, "data.dat"), d)
-
-        self.hilo = QThread()
         seasons = (None if self.seasons == self._seasons_defecto()
                    else copy.deepcopy(self.seasons))
-        self.worker = Worker(self.res_dir, seasons, self.opciones_nivel(),
-                             self.opciones_estabilidad(), self.opciones_mar())
+        varios = len(ero) * len(est) > 1
+        configs = []
+        for e in ero:
+            for m in est:
+                nombre = f"{NOMBRES_EROSION[e]} + {NOMBRES_ESTABILIDAD[m]}"
+                carpeta = os.path.join(self.res_dir, f"{e}_{m}") if varios else self.res_dir
+                os.makedirs(carpeta, exist_ok=True)
+                gl.write_data(os.path.join(carpeta, "data.dat"), d)
+                configs.append({"nombre": nombre, "clave_erosion": e, "clave_estabilidad": m,
+                                "dir": carpeta, "seasons": seasons,
+                                "nivel_lago": self.opciones_nivel(),
+                                "estabilidad": self.opciones_estabilidad(m),
+                                "mar": self.opciones_mar(),
+                                "erosion": self.opciones_erosion(e)})
+
+        self.hilo = QThread()
+        self.worker = Worker(configs)
         self.worker.moveToThread(self.hilo)
         self.hilo.started.connect(self.worker.run)
         self.worker.progreso.connect(self._progreso)
@@ -2233,13 +2434,14 @@ class Ventana(QMainWindow):
         self.progreso.setVisible(True)
         self.progreso.setValue(0)
         self.b_calc.setText("Detener")
-        self.statusBar().showMessage("Calculando…")
+        self.statusBar().showMessage(f"Calculando {len(configs)} combinación(es)…")
         self.hilo.start()
 
-    def _progreso(self, t, tsim):
-        self.progreso.setMaximum(tsim)
-        self.progreso.setValue(min(t, tsim))
-        self.progreso.setFormat(f"Mes {min(t, tsim)} / {tsim}")
+    def _progreso(self, i, n, t, tsim):
+        self.progreso.setMaximum(n * tsim)
+        self.progreso.setValue((i - 1) * tsim + min(t, tsim))
+        self.progreso.setFormat((f"Cálculo {i}/{n} · " if n > 1 else "") +
+                                f"mes {min(t, tsim)} / {tsim}")
 
     def _fin_hilo(self):
         self.hilo.quit()
@@ -2250,20 +2452,166 @@ class Ventana(QMainWindow):
         self.b_calc.setEnabled(True)
         self.progreso.setVisible(False)
 
-    def _terminado(self, res, segundos):
+    def _terminado(self, resultados, segundos):
         self._fin_hilo()
-        self.res = res
+        self.resultados = resultados
+        self.cb_resultado.blockSignals(True)
+        self.cb_resultado.clear()
+        for r in resultados:
+            self.cb_resultado.addItem(r["nombre"])
+        self.cb_resultado.blockSignals(False)
+        self.fila_resultado.setVisible(len(resultados) > 1)
+        self.res = resultados[0]["res"]
+        self.res_dir_actual = resultados[0]["dir"]
         self.lb_resdir.setText(f"Resultados guardados en: {self.res_dir}")
         self.mostrar_resultados()
+        self.mostrar_comparacion()
         self.tabs_datos.setCurrentIndex(3)
-        est = res.get("estabilidad", {})
-        nombres = {"fellenius": "Fellenius", "bishop": "Bishop", "spencer": "Spencer"}
-        txt_est = (f"{nombres.get(est.get('metodo'), '?')}, {est.get('rebanadas')} rebanadas, "
-                   f"criterio «{est.get('criterio')}»")
-        self.statusBar().showMessage(
-            f"Cálculo terminado en {segundos:.1f} s · modo {res.get('modo', 'lago')} · "
-            f"{len(res['roturas'])} deslizamientos y {len(res.get('vuelcos', []))} vuelcos · "
-            f"estabilidad: {txt_est} · salidas en {self.res_dir}")
+        if len(resultados) > 1:
+            self.tabs_der.setCurrentIndex(1)
+        est = self.res.get("estabilidad", {})
+        txt_est = (f"{est.get('rebanadas')} rebanadas, criterio «{est.get('criterio')}»")
+        if len(resultados) == 1:
+            r = resultados[0]
+            self.statusBar().showMessage(
+                f"Cálculo terminado en {segundos:.1f} s · modo {self.res.get('modo', 'lago')} · "
+                f"{r['nombre']} ({txt_est}) · {len(self.res['roturas'])} deslizamientos y "
+                f"{len(self.res.get('vuelcos', []))} vuelcos · salidas en {self.res_dir}")
+        else:
+            self.statusBar().showMessage(
+                f"{len(resultados)} cálculos terminados en {segundos:.1f} s · modo "
+                f"{self.res.get('modo', 'lago')} · {txt_est} · compáralos en la pestaña "
+                f"«Comparación» · salidas en {self.res_dir}")
+
+    def _elegir_resultado(self, i):
+        if 0 <= i < len(getattr(self, "resultados", [])):
+            self.res = self.resultados[i]["res"]
+            self.tb_roturas.clearSelection()
+            self.mostrar_resultados()
+            self.dibujar_nivel()
+
+    def _fila_comparacion(self):
+        filas = sorted({it.row() for it in self.tb_comp.selectedItems()})
+        if filas and filas[0] != self.cb_resultado.currentIndex():
+            self.cb_resultado.setCurrentIndex(filas[0])
+
+    @staticmethod
+    def _series_de(res):
+        D = res["DibMatriz"]
+        P0 = res["profile_inicial"]
+        meses = D[1, 3:]
+        val = meses > 0
+        cols = np.arange(3, D.shape[1])[val]
+        meses = meses[val]
+        TL = res["meta"]["TL"]
+        kc = res["meta"]["crestatalud"]
+        lago = np.array([P0[2, TL] - D[TL + 1, c] for c in cols])
+        cresta = np.array([P0[2, kc] - D[kc + 1, c] for c in cols])
+        return meses, lago, cresta
+
+    def mostrar_comparacion(self):
+        t = self.tb_comp
+        t.setRowCount(0)
+        for i, r in enumerate(getattr(self, "resultados", [])):
+            res = r["res"]
+            meses, lago, cresta = self._series_de(res)
+            anos = res["meta"]["tsim"] / 12.0
+            vals = (NOMBRES_EROSION[r["erosion"]], NOMBRES_ESTABILIDAD[r["estabilidad"]],
+                    str(len(res["roturas"])), str(len(res.get("vuelcos", []))),
+                    _f2(cresta[-1] / anos) if len(cresta) else "",
+                    _f2(lago[-1] / anos) if len(lago) else "", f"{r['segundos']:.1f}")
+            t.insertRow(i)
+            for k, val in enumerate(vals):
+                c = QTableWidgetItem(val)
+                c.setTextAlignment((Qt.AlignLeft if k < 2 else Qt.AlignRight) | Qt.AlignVCenter)
+                c.setForeground(QColor(matplotlib.colors.to_hex(self._color_calculo(i))))
+                t.setItem(i, k, c)
+        self.dibujar_comparacion()
+
+    @staticmethod
+    def _color_calculo(i):
+        return matplotlib.colormaps["tab10"](i % 10)
+
+    def dibujar_comparacion(self, *_):
+        lz = self.graf_comp
+        ax = lz.ax
+        ax.clear()
+        lz.estilo()
+        resultados = getattr(self, "resultados", [])
+        if not resultados:
+            ax.text(0.5, 0.5, "Calcula para comparar (marca varios métodos en «Parámetros»)",
+                    transform=ax.transAxes, ha="center", color="#888", fontsize=9)
+            ax.set_axis_off()
+            lz.draw_idle()
+            return
+        modo = self.cb_comp.currentIndex()
+        for i, r in enumerate(resultados):
+            res = r["res"]
+            c = self._color_calculo(i)
+            meses, lago, cresta = self._series_de(res)
+            if modo == 0:
+                ax.plot(meses / 12.0, cresta, "-o", ms=3, color=c, label=r["nombre"])
+            elif modo == 1:
+                ax.plot(meses / 12.0, lago, "-o", ms=3, color=c, label=r["nombre"])
+            elif modo == 2:
+                ev = sorted([(m, v) for m, v, *_ in res["roturas"]] +
+                            [(m, v) for m, v, *_ in res.get("vuelcos", [])])
+                if ev:
+                    ax.step([0] + [m / 12.0 for m, _ in ev] + [res["meta"]["tsim"] / 12.0],
+                            np.concatenate([[0], np.cumsum([v for _, v in ev]),
+                                            [sum(v for _, v in ev)]]),
+                            where="post", color=c, label=r["nombre"])
+            else:
+                N = res["meta"]["N"]
+                P0 = res["profile_inicial"]
+                if i == 0:
+                    ax.plot(P0[2, 1:N + 1], P0[1, 1:N + 1], color="#999", lw=1, ls="--",
+                            label="Perfil inicial")
+                ax.plot(res["DibMatriz"][2:N + 2, -1], P0[1, 1:N + 1], color=c, lw=1.4,
+                        label=r["nombre"])
+        if modo == 3:
+            r0 = resultados[0]["res"]
+            P0 = r0["profile_inicial"]
+            kc, kb = r0["meta"]["crestatalud"], max(1, r0["meta"]["TL"])
+            H = abs(P0[1, kc] - P0[1, kb]) or 1.0
+            ymin = min(float(np.min(r["res"]["DibMatriz"][kc + 1:kb + 2, -1]))
+                       for r in resultados)
+            ax.set_xlim(ymin - 0.4 * H, float(P0[2, kc]) + 2.5 * H)
+            ax.set_ylim(float(P0[1, kb]) - 0.6 * H, float(P0[1, 1]) + 0.1 * H)
+            ax.set_xlabel("Distancia horizontal y (m)")
+            ax.set_ylabel("Cota z (m)")
+        else:
+            ax.set_xlabel("Tiempo (años)")
+            ax.set_ylabel(["Retroceso de la cresta (m)", "Retroceso en el nivel del agua (m)",
+                           "Volumen acumulado (m³/m)"][modo])
+        ax.legend(fontsize=8)
+        lz.fig.tight_layout()
+        lz.draw_idle()
+
+    def exportar_comparacion(self):
+        if not getattr(self, "resultados", []):
+            QMessageBox.information(self, APP_NAME, "Primero hay que calcular.")
+            return
+        ruta, _ = QFileDialog.getSaveFileName(self, "Exportar comparación",
+                                              os.path.join(self._carpeta(), "comparacion.csv"),
+                                              "CSV (*.csv)")
+        if not ruta:
+            return
+        with open(ruta, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh, delimiter=";")
+            w.writerow(["erosion", "estabilidad", "deslizamientos", "vuelcos",
+                        "retroceso_cresta_m_ano", "retroceso_nivel_agua_m_ano", "tiempo_s",
+                        "carpeta"])
+            for r in self.resultados:
+                res = r["res"]
+                _, lago, cresta = self._series_de(res)
+                anos = res["meta"]["tsim"] / 12.0
+                w.writerow([r["erosion"], r["estabilidad"], len(res["roturas"]),
+                            len(res.get("vuelcos", [])),
+                            f"{cresta[-1] / anos:.4f}" if len(cresta) else "",
+                            f"{lago[-1] / anos:.4f}" if len(lago) else "",
+                            f"{r['segundos']:.1f}", r["dir"]])
+        self.statusBar().showMessage(f"Exportado {ruta}")
 
     def _error(self, msg):
         self._fin_hilo()

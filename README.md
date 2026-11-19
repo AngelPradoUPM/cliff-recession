@@ -21,6 +21,7 @@ marea (lago Erie), de R. Castedo (UPM). La tesis doctoral relacionada está en
 | `tools/verify.sh` | Compila el Fortran y comprueba que Fortran = `great_lake.py` = `great_lake_motor.py` (opciones por defecto). |
 | `tools/test_estabilidad.py` | Pruebas de los métodos de estabilidad (Fellenius, Bishop, Spencer). |
 | `tools/test_mar.py` | Pruebas del modo mar y de los vuelcos. |
+| `tools/test_castedo.py` | Pruebas de la erosión marina de Castedo frente a lo publicado en la tesis. |
 
 ## Uso de la versión en Python
 
@@ -42,6 +43,33 @@ Todas están desactivadas por defecto, y entonces da exactamente lo mismo que
 
 ```bash
 python great_lake_motor.py ejemplos/caso_simple --metodo bishop --rebanadas 20 --criterio profunda --nivel-estacional --nivel-interanual
+```
+
+### Erosión marina de Castedo (`--erosion castedo`)
+
+Es la erosión del modelo marino de la tesis (capítulos 5, 8 y 9). En cada ciclo
+de marea (ec. 8.1):
+
+Δy = Hb^(13/4) · Tb^(3/2) / (K · σc) · tan β · ∫ pw((w(t) − z)/Db) dt
+
+- Hb: altura de rotura, de Komar y Gaughan. Db = Hb/0,78.
+- σc: resistencia a compresión, de la columna UCS de los estratos.
+- tan β: pendiente local, limitada a 60°.
+- w(t): marea sinusoidal.
+- pw: función de forma, el polinomio racional de Chebyshev de la tabla 5.iv,
+  ajustado a los ensayos de Skafel y Bishop.
+- La integral se calcula con la regla de Simpson y 100 pasos por marea
+  (Δt = 448,56 s), como en el cap. 8.
+
+Con los valores de la tesis para Holderness (ola media 0,98 m y 7,66 s, marea
+de 3 m, K = 102, till de 182 kPa) da 1,3–1,5 m/año, frente a 1,55 m/año medidos.
+Las unidades no están del todo fijadas en la tesis; aquí σc va en MPa, pw en
+mm/h y el tiempo en horas. Por defecto usa además las fracciones de derrubios de
+la tesis: 70 % de un deslizamiento y 0 % de un vuelco. Las pruebas están en
+`tools/test_castedo.py`.
+
+```bash
+python great_lake_motor.py ejemplos/caso_mar --mar --erosion castedo --K 102
 ```
 
 ### Modo mar (`--mar`)
@@ -143,6 +171,21 @@ la subida del nivel del mar y el número de niveles de marea, y la vista
 muestra la franja entre bajamar y pleamar. Al guardar, las opciones de la
 herramienta (modo, marea, estabilidad, oleaje…) se escriben en
 `data.herramienta.json`, junto al `data.dat`, y se recuperan al abrirlo.
+
+**Métodos de cálculo y comparación**: en *Parámetros* se marcan uno o varios
+métodos de erosión (Trenhaile, Castedo) y de estabilidad (Fellenius, Bishop,
+Spencer), cada uno con su botón (i). Al calcular se ejecutan todas las
+combinaciones, cada una en una subcarpeta de `resultados/`.
+
+- La pestaña *Comparación* resume los cálculos en una tabla (roturas, retroceso
+  de la cresta y del nivel del agua, tiempo) y los superpone en una gráfica
+  (retroceso, volumen de roturas o perfil final).
+- Al elegir un cálculo, en la tabla o en «Cálculo mostrado», las demás vistas
+  pasan a mostrarlo.
+- Por defecto: en lago, Trenhaile + Fellenius (el original); en mar, Castedo +
+  Fellenius.
+
+![Comparación de métodos en modo mar](docs/captura_comparacion.png)
 
 **Roturas**: la pestaña *Roturas* y la línea temporal muestran los dos tipos de
 rotura del modelo:

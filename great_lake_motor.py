@@ -619,14 +619,16 @@ def _fs_spencer_malla(reb, ref, devolver_theta=False):
     return (f, th) if devolver_theta else f
 
 
-# Modo mar: valores por defecto basados en la costa de Holderness (tesis,
-# cap. 9.5.1): amplitud de marea 3 m, periodo 12.46 h, subida relativa del nivel
-# del mar 6 mm/ano y ola media en aguas profundas H0 = 0.98 m (boya de Hornsea).
-# Este modelo erosiona solo cuando las olas superan unos umbrales, asi que una
-# unica ola media no basta: el oleaje por defecto es una distribucion
-# ILUSTRATIVA cuya altura media anual coincide con esos 0.98 m (con temporales
-# de 3-4 m, mas frecuentes en invierno). Conviene sustituirla por datos reales.
-SEASONS_MAR = {
+# Modo mar: valores por defecto de la tesis para la costa de Holderness
+# (cap. 9.5.1): ola media en aguas profundas H0 = 0.98 m y periodo 7.66 s (boya
+# de Hornsea), amplitud de marea 3 m, periodo 12.46 h y subida relativa del
+# nivel del mar de 6 mm/ano. Es el oleaje que usa la erosion de Castedo, que no
+# tiene umbrales.
+SEASONS_MAR = {k: ([0.98], [7.66], [100.0]) for k in ("winter", "spring", "summer", "fall")}
+# La erosion de Trenhaile solo erosiona por encima de unos umbrales, asi que con
+# una unica ola media apenas actua: para ella se ofrece una distribucion
+# ILUSTRATIVA con temporales cuya altura media anual coincide con esos 0.98 m.
+SEASONS_MAR_TEMPORALES = {
     "winter": ([0.5, 1, 2, 3, 4], [5.0, 6.5, 7.66, 8.5, 9.0], [30, 30, 20, 8, 2]),
     "spring": ([0.5, 1, 2, 3, 4], [5.0, 6.5, 7.66, 8.5, 9.0], [40, 30, 15, 4, 1]),
     "summer": ([0.5, 1, 2, 3, 4], [5.0, 6.5, 7.66, 8.5, 9.0], [50, 30, 8, 2, 0.5]),
@@ -663,11 +665,82 @@ def bandas_marea(amplitud, dz, niveles_max=21):
     return [(d, fr / total) for d, fr in out]
 
 
+# ---------------------------------------------------------------------------
+# Erosion marina de Castedo (tesis, cap. 5, 8 y 9)
+# ---------------------------------------------------------------------------
+# Para cada ciclo de marea T (ec. 8.1):
+#   y(z, t+T) = y(z, t) - Hb^(13/4) Tb^(3/2) / (K sigma_c(z)) * tan(beta)
+#                           * integral_0^T pw((w(t) - z) / Db) dt
+# con Hb de Komar y Gaughan (1972), Db = Hb / 0.78, tan(beta) = (dy/dz)^-1 la
+# pendiente local (limitada a `pendiente_max`), w(t) = A sen(2 pi t / T) la
+# marea y pw la funcion de forma ajustada a los ensayos de Skafel y Bishop
+# (1994): polinomio racional de Chebyshev de orden 5/6 (tabla 5.iv), con un
+# maximo de 12,5 en Depth/Db = 0,3. La integral se evalua con la regla de
+# Simpson y dt = 448,56 s (100 pasos por marea), como en el cap. 8.
+# La tesis no fija del todo las unidades: aqui sigma_c va en MPa (columna UCS
+# de los estratos, en kPa / 1000), pw en mm/h por unidad de pendiente y la
+# integral en horas (mm), que se pasa a metros. K se calibra con datos reales.
+PW_NUM = (-1.069838130676276, -0.01221236978255141, 0.4610744748787188,
+          0.07844716807628178, 0.652841133940385, -0.08926720346045524)
+PW_DEN = (1.0, -1.441825011828062, 1.303412347447682, -0.9727210591773651,
+          0.5803220956908709, -0.2877147080827893, 0.1702945908127132)
+PERIODO_MAREA_H = 12.46
+EROSION_METODOS = ("trenhaile", "castedo")
+# K = 102 (tesis, cap. 9, Holderness). Con esta convencion de unidades, el caso
+# de Holderness de la tesis (ola media, marea 3 m, till de 182 kPa) da ~1,3-1,5
+# m/ano, frente a 1,55 m/ano medidos. Pendiente maxima 60 grados (cap. 9) y
+# derrubios: 70 % del volumen de un deslizamiento y 0 % de un vuelco (cap. 9).
+CASTEDO_DEFECTO = {"K": 102.0, "pendiente_max": 60.0,
+                   "derrubios_deslizamiento": 0.7, "derrubios_vuelco": 0.0}
+
+
+def _chebyshev(coef, x):
+    t0 = np.ones_like(x)
+    t1 = x
+    s_ = coef[0] * t0 + coef[1] * t1
+    for c in coef[2:]:
+        t0, t1 = t1, 2 * x * t1 - t0
+        s_ = s_ + c * t1
+    return s_
+
+
+def pw_castedo(r):
+    """Funcion de forma pw (>= 0) para r = profundidad bajo el agua / Db."""
+    r = np.asarray(r, dtype=float)
+    x = (r - 0.5111604219506374) / 0.5110522089614126
+    with np.errstate(all="ignore"):
+        v = -_chebyshev(PW_NUM, x) / _chebyshev(PW_DEN, x)
+    return np.where((r >= 0.0) & (r <= 1.0), np.maximum(v, 0.0), 0.0)
+
+
+def altura_rotura(h0, t0):
+    """Altura de ola en rotura (Komar y Gaughan, 1972)."""
+    return 0.39 * 9.81 ** 0.2 * (t0 * h0 ** 2) ** 0.4
+
+
+def integral_marea(zrel, amplitud, db, pasos=100):
+    """Integral de pw sobre un ciclo de marea (en horas), regla de Simpson.
+
+    zrel: cotas respecto al nivel medio; amplitud de la marea (0 = nivel fijo).
+    """
+    zrel = np.asarray(zrel, dtype=float)
+    if amplitud <= 0:
+        return pw_castedo(-zrel / db) * PERIODO_MAREA_H
+    t = np.linspace(0.0, PERIODO_MAREA_H, pasos + 1)
+    w = amplitud * np.sin(2 * np.pi * t / PERIODO_MAREA_H)
+    v = pw_castedo((w[:, None] - zrel[None, :]) / db)
+    h = PERIODO_MAREA_H / pasos
+    pesos = np.ones(pasos + 1)
+    pesos[1:-1:2] = 4.0
+    pesos[2:-1:2] = 2.0
+    return (h / 3.0) * (pesos[:, None] * v).sum(axis=0)
+
+
 NIVEL_ESTACIONAL_TESIS = {"spring": 0.4, "summer": 0.3, "fall": 0.0, "winter": 0.0}
 
 
 def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
-        estabilidad=None, mar=None):
+        estabilidad=None, mar=None, erosion=None):
     """Ejecuta el modelo con el data.dat de ``workdir``.
 
     progress:   funcion opcional progress(Tglob, tsim); si devuelve False se
@@ -700,6 +773,12 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
                 entre los niveles de la marea segun el tiempo que el agua pasa
                 en cada uno, y el nivel medio sube con el tiempo. Por defecto el
                 oleaje es SEASONS_MAR (Holderness, tesis cap. 9).
+    erosion:    None (por defecto) = erosion de Trenhaile del original. Si es
+                un diccionario con "metodo": "castedo", usa la erosion marina de
+                Castedo (tesis cap. 5, 8, 9) con "K" (calibracion),
+                "pendiente_max" (grados) y las fracciones del volumen de cada
+                rotura que quedan como derrubios al pie
+                ("derrubios_deslizamiento", "derrubios_vuelco"; original: 1).
     """
     np.seterr(all="ignore")   # la configuracion de NumPy es por hilo
     tic = time.process_time()
@@ -729,6 +808,19 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
     roturanotch = g["roturanotch"]; zerolevel = g["zerolevel"]; TL = g["TL"]
     P_inicial = P.copy()
     controllevel = TL
+    if erosion and (erosion.get("metodo") == "castedo"):
+        # resistencia a compresion (MPa) de cada punto del perfil segun su estrato
+        sig_pt = np.zeros(N + 1)
+        for k_ in range(1, N + 1):
+            tp_ = 1
+            acum = float(d["potestrato"][1])
+            while P[1, 1] - acum > P[1, k_] and tp_ < int(d["ndatosresis"]):
+                tp_ += 1
+                acum += float(d["potestrato"][tp_])
+            sig_pt[k_] = float(d["sigmac"][tp_]) / 1000.0
+        if np.any(sig_pt[1:] <= 0):
+            raise ValueError("La erosion de Castedo necesita la resistencia a compresion "
+                             "(UCS) de todos los estratos")
     if mar is not None:
         _bandas = bandas_marea(float(mar.get("amplitud", MAR_TESIS["amplitud"])), float(Dz),
                                int(mar.get("niveles", MAR_TESIS["niveles"])))
@@ -788,6 +880,16 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
     if nreb < 1:
         raise ValueError("el numero de rebanadas debe ser >= 1")
     MAX_ROTURAS_MES = 50   # salvaguarda para los criterios "profunda" y "minimo"
+    ero_op = dict(erosion or {})
+    metodo_erosion = ero_op.get("metodo", "trenhaile")
+    if metodo_erosion not in EROSION_METODOS:
+        raise ValueError(f"metodo de erosion desconocido: {metodo_erosion}")
+    castedo = metodo_erosion == "castedo"
+    if castedo:
+        for k_, v_ in CASTEDO_DEFECTO.items():
+            ero_op.setdefault(k_, v_)
+    frac_desl = float(ero_op.get("derrubios_deslizamiento", 1.0)) if erosion else None
+    frac_vuel = float(ero_op.get("derrubios_vuelco", 1.0)) if erosion else None
     modo_mar = mar is not None
     if modo_mar:
         if seasons is None:
@@ -955,6 +1057,33 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
                 niveles_mes = [(TL, 1.0)]
             TL_ref = TL
             ey_niveles = []
+            if castedo:
+                # erosion marina de Castedo: un paso por ciclo de marea
+                niveles_mes = []
+                amp_c = amp_marea if modo_mar else 0.0
+                zrel = P[1, 1:N + 1] - P[1, TL]
+                e_ciclo = np.zeros(N)
+                db_max = 0.0
+                for i in range(1, Waves + 1):
+                    if T[i] > 0 and H[i] > 0 and WF[i] > 0:
+                        hb_ = altura_rotura(float(H[i]), float(T[i]))
+                        db_ = hb_ / 0.78
+                        db_max = max(db_max, db_)
+                        e_ciclo += ((float(WF[i]) / 100.0) * hb_ ** 3.25 * float(T[i]) ** 1.5
+                                    * integral_marea(zrel, amp_c, db_))
+                e_ciclo = e_ciclo / (ero_op["K"] * sig_pt[1:N + 1]) / 1000.0
+                n_ciclos = int(round(float(30 - Dprot) * 24.0 / PERIODO_MAREA_H))
+                tan_max = math.tan(math.radians(ero_op["pendiente_max"]))
+                activo = e_ciclo > 0
+                for _ in range(n_ciclos):
+                    dydz = np.zeros(N)
+                    dydz[:-1] = (P[2, 1:N] - P[2, 2:N + 1]) / float(Dz)
+                    with np.errstate(divide="ignore"):
+                        tanb = np.where(dydz != 0, 1.0 / np.abs(dydz), tan_max)
+                    tanb = np.minimum(tanb, tan_max)
+                    P[2, 1:N + 1] = np.where(activo, P[2, 1:N + 1] - e_ciclo * tanb,
+                                             P[2, 1:N + 1])
+                DB = int((amp_c + db_max) / float(Dz)) + 2
             for TL, f_marea in niveles_mes:
                 Ey = F64(0)
                 for i in range(1, Waves + 1):
@@ -1219,8 +1348,8 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
 
                 ey_niveles.append((TL, Ey))
             TL = TL_ref
-            if modo_mar:
-                DC = TL + DB
+            if modo_mar or castedo:
+                DC = min(N - 1, TL + DB)
 
             # Nuevas posiciones tras la erosion
             for j in range(1, N + 1):
@@ -1622,6 +1751,8 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
             if parametrorotura == 1:
                 volacumulado2 = F64(0)
                 volacumulado = volacumulado1
+                if frac_desl is not None:
+                    volacumulado = volacumulado * frac_desl
             elif parametrorotura == 0:
                 volacumulado1 = F64(0)
                 # ROTURA POR VUELCO
@@ -1683,6 +1814,8 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
                         for ii in range(Ptocorte, roturanotch + 1):
                             P[2, ii] = vvr[ii]
                         volacumulado = volacumulado2
+                        if frac_vuel is not None:
+                            volacumulado = volacumulado * frac_vuel
                         vuelcos.append((Tglob, float(volacumulado2), antes_v,
                                         P[2, 1:N + 1].astype(float)))
                     elif Sigmatensilemax < Sigmatensilerock:
@@ -1828,6 +1961,7 @@ def run(workdir=".", verbose=True, progress=None, seasons=None, nivel_lago=None,
         "roturas_fs": roturas_fs,
         "vuelcos": vuelcos,
         "modo": "mar" if modo_mar else "lago",
+        "erosion": dict(ero_op, metodo=metodo_erosion),
         "mar": (dict(amplitud=amp_marea, subida_mm_ano=subida_mar, bandas=bandas)
                 if modo_mar else None),
         "estabilidad": dict(metodo=metodo, rebanadas=(nreb if estabilidad else 5),
@@ -1860,6 +1994,10 @@ if __name__ == "__main__":
                     help="numero de rebanadas (original: 5)")
     ap.add_argument("--criterio", choices=CRITERIOS_ROTURA, default="todas",
                     help="criterio de rotura (original: todas)")
+    ap.add_argument("--erosion", choices=EROSION_METODOS, default="trenhaile",
+                    help="erosion: trenhaile (original del lago) o castedo (marina, tesis)")
+    ap.add_argument("--K", type=float, default=CASTEDO_DEFECTO["K"],
+                    help="constante de calibracion de la erosion de Castedo")
     ap.add_argument("--mar", action="store_true",
                     help="modo mar: marea, sin hielo y subida del nivel del mar")
     ap.add_argument("--amplitud-marea", type=float, default=MAR_TESIS["amplitud"],
@@ -1875,4 +2013,5 @@ if __name__ == "__main__":
     if (a.metodo, a.rebanadas, a.criterio) != ("fellenius", 5, "todas"):
         est = {"metodo": a.metodo, "rebanadas": a.rebanadas, "criterio": a.criterio}
     mr = ({"amplitud": a.amplitud_marea, "subida_mm_ano": a.subida_mar} if a.mar else None)
-    run(a.directorio, nivel_lago=nl, estabilidad=est, mar=mr)
+    er = {"metodo": "castedo", "K": a.K} if a.erosion == "castedo" else None
+    run(a.directorio, nivel_lago=nl, estabilidad=est, mar=mr, erosion=er)

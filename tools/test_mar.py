@@ -75,7 +75,8 @@ class TestMarConMarea(unittest.TestCase):
                 sub = os.path.join(t, f"a{amp:g}")
                 os.makedirs(sub)
                 gm.write_data(os.path.join(sub, "data.dat"), d)
-                r = gm.run(sub, verbose=False, mar={"amplitud": amp, "subida_mm_ano": 0.0})
+                r = gm.run(sub, verbose=False, mar={"amplitud": amp, "subida_mm_ano": 0.0},
+                           seasons=gm.SEASONS_MAR_TEMPORALES)
                 P0 = r["profile_inicial"]
                 N = r["meta"]["N"]
                 res[amp] = (P0[1, 1:N + 1], P0[2, 1:N + 1] - r["DibMatriz"][2:N + 2, -1])

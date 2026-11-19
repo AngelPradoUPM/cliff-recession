@@ -123,16 +123,11 @@ AYUDA = {
     # ------------------------------------------------------------ estabilidad
     "metodo": (
         "Cómo se calcula si un trozo del acantilado está a punto de deslizar (factor de "
-        "seguridad: si es menor que 1, rompe).",
-        "Los tres dividen la masa que desliza en rebanadas verticales:<br>"
-        "<b>Fellenius</b> (original y tesis): ignora las fuerzas entre rebanadas. Es el más "
-        "sencillo y el más conservador (da el FS más bajo).<br>"
-        "<b>Bishop simplificado</b>: tiene en cuenta las fuerzas horizontales entre "
-        "rebanadas. Es el estándar en la práctica para roturas circulares y suele dar un "
-        "FS algo mayor (0–15 %).<br>"
-        "<b>Spencer</b>: riguroso, cumple todas las ecuaciones de equilibrio. En roturas "
-        "circulares queda muy cerca de Bishop (±3 %); es más lento.<br><br>"
-        "Los parámetros de la tesis se calibraron con Fellenius.",
+        "seguridad FS: si es menor que 1, rompe). Puedes marcar varios para compararlos.",
+        "Los tres dividen la masa que desliza en rebanadas verticales y difieren en cómo "
+        "tratan las fuerzas entre rebanadas: <b>Fellenius</b> las ignora (original, el más "
+        "conservador), <b>Bishop</b> incluye las horizontales y <b>Spencer</b> cumple todas "
+        "las ecuaciones de equilibrio. Cada uno tiene su botón (i) con el detalle.",
     ),
     "rebanadas": (
         "En cuántos trozos se divide la masa que desliza para calcular su estabilidad.",
@@ -189,6 +184,110 @@ AYUDA = {
         "comas o punto y coma. Las líneas que no son numéricas, como las cabeceras, se "
         "ignoran.",
     ),
+    # ---------------------------------------------------- metodos de calculo
+    "erosion": (
+        "Cómo se calcula cuánto erosiona el agua el acantilado. Puedes marcar los dos "
+        "métodos para comparar sus resultados.",
+        "<b>Trenhaile</b>: el del modelo original de lago (capítulo 10 de la tesis).<br>"
+        "<b>Castedo</b>: el del modelo marino de la tesis (capítulos 5, 8 y 9).<br><br>"
+        "Cada combinación de método de erosión y de estabilidad marcada es un cálculo "
+        "aparte. Sus resultados se comparan en la pestaña «Comparación».",
+    ),
+    "erosion_trenhaile": (
+        "Erosión del modelo original de lago. Las olas solo erosionan cuando su fuerza "
+        "supera unos umbrales del terreno.",
+        "Basado en Trenhaile (2009), tal y como lo usa Great_lake. Cada tipo de ola se "
+        "propaga hacia la costa y rompe. Con ella se calculan tres erosiones:<br>"
+        "• <b>del fondo</b>, por el esfuerzo cortante bajo el agua (umbral τ<sub>c</sub>);<br>"
+        "• <b>por impacto</b> de la ola rota en el nivel del agua (umbral SF<sub>cr</sub>), "
+        "amortiguada por la anchura de la zona de rompientes;<br>"
+        "• <b>por run-up</b>, cuando hay playa.<br><br>"
+        "Usa los parámetros de las secciones «Erosión por esfuerzo cortante», «Erosión por "
+        "impacto», «Run-up» y «Playa». Como solo erosionan las olas que superan los "
+        "umbrales, necesita un oleaje que incluya temporales; con una ola media apenas "
+        "actúa.",
+    ),
+    "erosion_castedo": (
+        "Erosión del modelo marino de Ricardo Castedo. Depende de la altura y el periodo de "
+        "las olas, de la pendiente del terreno y de su resistencia a compresión, sin "
+        "umbrales.",
+        "Fórmula de la tesis (ec. 8.1), basada en Kamphuis (1987). En cada ciclo de "
+        "marea:<br>"
+        "Δy = H<sub>b</sub><sup>13/4</sup>·T<sub>b</sub><sup>3/2</sup> / (K·σ<sub>c</sub>) · "
+        "tan β · ∫ p<sub>w</sub>(prof./D<sub>b</sub>) dt<br>"
+        "• <b>H<sub>b</sub></b>: altura de rotura (Komar y Gaughan); "
+        "D<sub>b</sub> = H<sub>b</sub>/0,78 es la profundidad de rotura.<br>"
+        "• <b>σ<sub>c</sub></b>: resistencia a compresión, de la columna UCS de los "
+        "estratos.<br>"
+        "• <b>tan β</b>: pendiente local del perfil. Cuanto más inclinado, más erosión; "
+        "está limitada a la pendiente máxima.<br>"
+        "• <b>p<sub>w</sub></b>: «función de forma» ajustada a ensayos de laboratorio "
+        "(Skafel y Bishop, 1994). Concentra la erosión a una profundidad de 0,3·D<sub>b</sub> "
+        "bajo el agua.<br>"
+        "• La integral recorre el ciclo de marea (regla de Simpson, 100 pasos), así que la "
+        "erosión se reparte entre bajamar y pleamar.<br><br>"
+        "No usa los parámetros de Trenhaile (umbrales, run-up, playa). Con los valores de "
+        "la tesis para Holderness (ola media 0,98 m y 7,66 s, marea de 3 m, K = 102, till "
+        "de 182 kPa) da ~1,3–1,5 m/año, frente a 1,55 m/año medidos. La tesis no fija del "
+        "todo las unidades, así que K se debe calibrar con datos de retroceso del sitio.",
+    ),
+    "castedo_K": (
+        "Constante de calibración de la erosión de Castedo. Más alta = menos erosión.",
+        "Agrupa constantes hidrodinámicas desconocidas (Kamphuis, 1987). Se ajusta "
+        "comparando con retrocesos históricos medidos. Tesis: K = 100 (cap. 8) y 102 "
+        "(cap. 9) para Holderness. Unidades usadas aquí: σ<sub>c</sub> en MPa, "
+        "p<sub>w</sub> en mm/h y tiempo en horas.",
+    ),
+    "castedo_pendiente": (
+        "Pendiente a partir de la cual el terreno ya no se erosiona más deprisa por ser "
+        "más empinado.",
+        "La erosión es proporcional a la pendiente local, tan β. En una cara casi vertical "
+        "tan β tiende a infinito, así que se limita. La tesis usa 50° (cap. 5) y 60° "
+        "(cap. 9).",
+    ),
+    "castedo_derrubios": (
+        "Qué parte del material caído en cada rotura se queda al pie protegiendo el "
+        "acantilado. El resto se lo lleva el mar enseguida.",
+        "Tesis, Holderness: el 70 % del volumen de un deslizamiento forma el talud de "
+        "derrubios y el 0 % del de un vuelco, que se dispersa enseguida. El modelo de lago "
+        "original usa el 100 % de ambos. Solo se aplica a los cálculos con erosión de "
+        "Castedo. Mientras quedan derrubios, el pie no se erosiona (meses en color arena de "
+        "la línea temporal).",
+    ),
+    "estab_fellenius": (
+        "Fellenius: el método más sencillo para saber si un trozo de acantilado desliza. Es "
+        "el del modelo original y el más conservador.",
+        "Método ordinario de rebanadas (Fellenius, 1936). Divide la masa que puede deslizar "
+        "en rebanadas verticales y compara las fuerzas que resisten con las que empujan, "
+        "sin tener en cuenta las fuerzas entre rebanadas. Da el factor de seguridad más "
+        "bajo de los tres, sobre todo con agua en el terreno. Es el que usan el código "
+        "original y la tesis, cuyos parámetros se calibraron con él.",
+    ),
+    "estab_bishop": (
+        "Bishop: más preciso que Fellenius y el más usado en la práctica para roturas "
+        "circulares.",
+        "Bishop simplificado (1955). Tiene en cuenta las fuerzas horizontales entre "
+        "rebanadas y cumple el equilibrio de momentos y el de fuerzas verticales. Se "
+        "resuelve por iteraciones y suele dar un FS entre un 0 y un 15 % mayor que "
+        "Fellenius, así que las roturas llegan algo más tarde.",
+    ),
+    "estab_spencer": (
+        "Spencer: el más riguroso de los tres. Cumple todas las ecuaciones de equilibrio.",
+        "Spencer (1967). Supone que las fuerzas entre rebanadas tienen una inclinación θ "
+        "constante y busca la θ con la que el equilibrio de fuerzas y el de momentos dan el "
+        "mismo FS. En roturas circulares queda muy cerca de Bishop (±3 %). Se resuelve "
+        "partiendo de Bishop y es algo más lento.",
+    ),
+    "comparacion": (
+        "Resultados de todos los cálculos (uno por cada combinación de métodos marcada), "
+        "para compararlos.",
+        "La tabla resume cada cálculo: número de deslizamientos y vuelcos, retroceso medio "
+        "anual de la cresta y del perfil en el nivel del agua, y tiempo de cálculo. Al "
+        "seleccionar una fila, ese cálculo se muestra en las demás vistas: perfil, línea "
+        "temporal, roturas y gráficas. La gráfica superpone, para todos los cálculos, el "
+        "retroceso en el tiempo, el volumen de roturas acumulado o el perfil final. Cada "
+        "cálculo guarda sus ficheros en su propia subcarpeta de «resultados».",
+    ),
     # ------------------------------------------------------------ modo / mar
     "modo": (
         "Elige si el acantilado da a un lago (sin marea) o al mar (con marea).",
@@ -196,12 +295,13 @@ AYUDA = {
         "sin marea como el Erie. El nivel del agua es fijo y en invierno el hielo "
         "impide el oleaje. Con las opciones por defecto da los mismos resultados que el "
         "Fortran.<br>"
-        "<b>Mar</b>: es una adaptación de la herramienta. Mantiene el mismo modelo de "
-        "erosión y de roturas, pero añade una marea sinusoidal: el oleaje actúa en cada "
-        "nivel de la marea según el tiempo que el agua pasa en él, y la erosión se reparte "
-        "en altura. Además se calculan los 12 meses (no hay hielo) y el nivel medio del mar "
-        "puede subir. Los valores por defecto se basan en la costa de Holderness (Reino "
-        "Unido), estudiada en el cap. 9 de la tesis.<br><br>"
+        "<b>Mar</b>: añade una marea sinusoidal y la subida del nivel del mar, y calcula "
+        "los 12 meses (no hay hielo). Por defecto usa la <b>erosión marina de Castedo</b>, la "
+        "del modelo marino de la tesis (cap. 5, 8 y 9), que reparte la erosión a lo largo de "
+        "cada ciclo de marea, y los valores de la tesis para la costa de Holderness (Reino "
+        "Unido). También se puede usar la erosión de Trenhaile con marea: el oleaje actúa en "
+        "cada nivel de la marea según el tiempo que el agua pasa en él. Las roturas "
+        "(deslizamientos y vuelcos) son las mismas en los dos modos.<br><br>"
         "Las opciones de cada modo se guardan junto al data.dat, en el fichero "
         "<i>data.herramienta.json</i>.",
     ),
