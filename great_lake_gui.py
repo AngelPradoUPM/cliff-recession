@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDockWidget,
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QMainWindow, QMenu, QMessageBox, QProgressBar,
-    QPushButton, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem,
+    QPushButton, QScrollArea, QSizePolicy, QSpinBox, QTableWidget, QTableWidgetItem,
     QTabWidget, QToolButton, QToolTip, QVBoxLayout, QWidget,
 )
 
@@ -398,46 +398,66 @@ class InfoBoton(QToolButton):
         self._popup = None
 
     def mostrar(self):
-        sencillo, detalle = AYUDA.get(self.clave, ("(Sin ayuda)", None))
-        pop = QFrame(self, Qt.Popup)
-        pop.setObjectName("infopopup")
-        pop.setStyleSheet(
-            "#infopopup { background: white; border: 1px solid #9dbbe6; border-radius: 6px; }"
-            "QLabel { background: transparent; }")
-        lay = QVBoxLayout(pop)
-        lay.setContentsMargins(12, 10, 12, 10)
-        lay.setSpacing(6)
-        l1 = QLabel(sencillo)
-        l1.setWordWrap(True)
-        l1.setStyleSheet("font-size: 10pt; font-weight: bold; color: #1d2a3a;")
-        lay.addWidget(l1)
-        if detalle:
-            sep = QFrame()
-            sep.setFrameShape(QFrame.HLine)
-            sep.setStyleSheet("color: #dfe6ef;")
-            lay.addWidget(sep)
-            titulo = QLabel("En detalle")
-            titulo.setStyleSheet(f"font-size: 8pt; font-weight: bold; color: {ACCENT_DARK};"
-                                 " text-transform: uppercase;")
-            lay.addWidget(titulo)
-            l2 = QLabel(detalle)
-            l2.setWordWrap(True)
-            l2.setTextFormat(Qt.RichText)
-            l2.setStyleSheet("font-size: 9pt; color: #3a4554;")
-            lay.addWidget(l2)
-        pop.setFixedWidth(420)
-        pop.adjustSize()
-        # debajo del boton, sin salirse de la pantalla
-        pos = self.mapToGlobal(self.rect().bottomLeft())
-        pantalla = self.screen().availableGeometry() if self.screen() else None
-        x, y = pos.x() - 10, pos.y() + 4
-        if pantalla is not None:
-            x = max(pantalla.left() + 4, min(x, pantalla.right() - pop.width() - 4))
-            if y + pop.height() > pantalla.bottom():
-                y = self.mapToGlobal(self.rect().topLeft()).y() - pop.height() - 4
-        pop.move(x, y)
-        pop.show()
-        self._popup = pop
+        self._popup = mostrar_ayuda(self, self.clave)
+
+
+def mostrar_ayuda(widget, clave):
+    """Desplegable con la explicacion sencilla y, debajo, la detallada."""
+    sencillo, detalle = AYUDA.get(clave, ("(Sin ayuda)", None))
+    pop = QFrame(widget, Qt.Popup)
+    pop.setObjectName("infopopup")
+    pop.setStyleSheet(
+        "#infopopup { background: white; border: 1px solid #9dbbe6; border-radius: 6px; }"
+        "QLabel { background: transparent; }")
+    lay = QVBoxLayout(pop)
+    lay.setContentsMargins(12, 10, 12, 10)
+    lay.setSpacing(6)
+    l1 = QLabel(sencillo)
+    l1.setWordWrap(True)
+    l1.setStyleSheet("font-size: 10pt; font-weight: bold; color: #1d2a3a;")
+    lay.addWidget(l1)
+    if detalle:
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: #dfe6ef;")
+        lay.addWidget(sep)
+        titulo = QLabel("En detalle")
+        titulo.setStyleSheet(f"font-size: 8pt; font-weight: bold; color: {ACCENT_DARK};"
+                             " text-transform: uppercase;")
+        lay.addWidget(titulo)
+        l2 = QLabel(detalle)
+        l2.setWordWrap(True)
+        l2.setTextFormat(Qt.RichText)
+        l2.setStyleSheet("font-size: 9pt; color: #3a4554;")
+        lay.addWidget(l2)
+    pop.setFixedWidth(420)
+    pop.adjustSize()
+    # debajo del boton, sin salirse de la pantalla
+    pos = widget.mapToGlobal(widget.rect().bottomLeft())
+    pantalla = widget.screen().availableGeometry() if widget.screen() else None
+    x, y = pos.x() - 10, pos.y() + 4
+    if pantalla is not None:
+        x = max(pantalla.left() + 4, min(x, pantalla.right() - pop.width() - 4))
+        if y + pop.height() > pantalla.bottom():
+            y = widget.mapToGlobal(widget.rect().topLeft()).y() - pop.height() - 4
+    pop.move(x, y)
+    pop.show()
+    return pop
+
+
+class EtiquetaAyuda(QLabel):
+    """Etiqueta que, al pincharla, despliega su explicacion (cursor «?»)."""
+
+    def __init__(self, clave="", parent=None):
+        super().__init__(parent)
+        self.clave = clave
+        self.setCursor(Qt.WhatsThisCursor)
+        self._popup = None
+
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.LeftButton:
+            self._popup = mostrar_ayuda(self, self.clave)
+        super().mousePressEvent(ev)
 
 
 def etiqueta_info(texto, clave):
@@ -1064,18 +1084,15 @@ class Ventana(QMainWindow):
         self.cb_vel.currentIndexChanged.connect(self._velocidad)
         fila.addWidget(self.cb_vel)
         fila.addStretch(1)
-        bl.addLayout(fila)
-        # leyenda: cada elemento explica qué significa al pasar el ratón por encima
-        fila = QHBoxLayout()
-        fila.setSpacing(14)
+        # leyenda: al pinchar en cada elemento se despliega qué significa
         self._leyenda_linea = {}
         for clave in ("deslizamiento", "vuelco", "erosion", "invierno", "derrubios"):
-            lb = QLabel()
+            lb = EtiquetaAyuda()
             lb.setStyleSheet("color: #c3cad5; font-size: 8pt;")
-            lb.setCursor(Qt.WhatsThisCursor)
+            lb.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            fila.addSpacing(6)
             fila.addWidget(lb)
             self._leyenda_linea[clave] = lb
-        fila.addStretch(1)
         self._actualizar_leyenda_linea()
         bl.addLayout(fila)
         self.linea = LineaTemporal()
@@ -2206,46 +2223,24 @@ class Ventana(QMainWindow):
 
     def _actualizar_leyenda_linea(self):
         lago = getattr(self, "modo", "lago") == "lago"
-        cuadro = ('<span style="color:{c}; background:{c}">&nbsp;&nbsp;&nbsp;</span>')
-        textos = {
-            "deslizamiento": (
-                f'<span style="color:{COLOR_ROTURA}">┃</span> deslizamiento',
-                "<b>Deslizamiento</b><br>Rotura circular: una masa de terreno desliza a lo "
-                "largo de una superficie curva porque su factor de seguridad ha bajado de 1. "
-                "La raya roja marca el mes en que ocurre (más alta si hay varias ese mes). "
-                "El volumen y el factor de seguridad de cada una están en la pestaña "
-                "«Roturas»."),
-            "vuelco": (
-                f'<span style="color:{COLOR_VUELCO}">╻</span> vuelco',
-                "<b>Vuelco</b><br>El oleaje excava una muesca en el pie y el bloque de encima "
-                "queda en voladizo. Cuando la tensión de tracción que provoca su peso supera "
-                "la resistencia del terreno, el bloque se parte y cae. La raya ámbar marca el "
-                "mes en que ocurre."),
-            "erosion": (
-                cuadro.format(c=COLOR_MES_CALCULADO) + " mes con erosión",
-                "<b>Mes con erosión</b><br>Mes calculado normalmente: el oleaje ataca el pie "
-                "del acantilado y lo va erosionando, y se comprueba si se produce alguna "
-                "rotura."),
-            "invierno": (
-                (f'<span style="color:{COLOR_INVIERNO}">█</span> '
-                 + ("invierno: lago helado" if lago else "sin oleaje")),
-                ("<b>Invierno: lago helado</b><br>De enero a marzo el lago está helado y no "
-                 "hay oleaje, así que el modelo salta esos meses sin erosión."
-                 if lago else
-                 "<b>Sin oleaje</b><br>Mes de una estación sin oleaje definido (pestaña "
-                 "«Oleaje»): ese mes no hay erosión.")),
-            "derrubios": (
-                f'<span style="color:{COLOR_DERRUBIOS}">█</span> pie protegido por derrubios',
-                "<b>Pie protegido por derrubios</b><br>Tras una rotura, el material caído "
-                "queda al pie del acantilado y lo protege del oleaje. El agua tarda "
-                "volumen/M<sub>f</sub> días en llevárselo (M<sub>f</sub>: coeficiente de "
-                "movilidad, pestaña «Parámetros»); mientras tanto el modelo salta esos "
-                "meses sin erosión."),
+        cuadro = f'<span style="color:#59616e">█</span>'
+        elementos = {
+            "deslizamiento": (f'<span style="color:{COLOR_ROTURA}">┃</span> deslizamiento',
+                              "ley_deslizamiento"),
+            "vuelco": (f'<span style="color:{COLOR_VUELCO}">╻</span> vuelco', "ley_vuelco"),
+            "erosion": (cuadro + " mes con erosión", "ley_erosion"),
+            "invierno": (f'<span style="color:{COLOR_INVIERNO}">█</span> '
+                         + ("lago helado" if lago else "sin oleaje"),
+                         "ley_invierno_lago" if lago else "ley_invierno_mar"),
+            "derrubios": (f'<span style="color:{COLOR_DERRUBIOS}">█</span> derrubios al pie',
+                          "ley_derrubios"),
         }
-        for clave, (txt, ayuda) in textos.items():
+        for clave, (txt, ayuda) in elementos.items():
             lb = self._leyenda_linea[clave]
             lb.setText(txt)
-            lb.setToolTip(f"<div style='max-width: 320px'>{ayuda}</div>")
+            lb.clave = ayuda
+            lb.setMinimumWidth(0)
+            lb.setMinimumWidth(lb.sizeHint().width() + 6)   # que no se corte el texto
 
     def _actualizar_titulo(self):
         modo = "lago" if self.modo == "lago" else "mar"

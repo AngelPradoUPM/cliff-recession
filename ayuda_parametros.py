@@ -369,6 +369,42 @@ AYUDA = {
         "Al pasar el ratón por la barra se ve qué ocurre en cada mes. Teclas: ← → (un "
         "mes), RePág/AvPág (un año), Inicio/Fin.",
     ),
+    # ------------------------------------- leyenda de la linea temporal
+    "ley_deslizamiento": (
+        "Deslizamiento: una masa de terreno se desliza a lo largo de una superficie curva.",
+        "Rotura circular: ocurre cuando el factor de seguridad de una superficie de rotura "
+        "baja de 1 (las fuerzas que la mueven superan a las que la sujetan). La raya roja "
+        "marca el mes en que ocurre, más alta si hay varias ese mes. El volumen y el factor "
+        "de seguridad de cada una están en la pestaña «Roturas».",
+    ),
+    "ley_vuelco": (
+        "Vuelco: un bloque en voladizo se parte y cae.",
+        "El oleaje excava una muesca en el pie del acantilado y el bloque de encima queda "
+        "colgando. Cuando la tensión de tracción que provoca su peso supera la resistencia "
+        "del terreno, el bloque se parte y cae. La raya ámbar marca el mes en que ocurre.",
+    ),
+    "ley_erosion": (
+        "Mes calculado normalmente: el oleaje erosiona el pie del acantilado.",
+        "Cada uno de estos meses se aplica la erosión del oleaje y después se comprueba si "
+        "el acantilado se ha vuelto inestable (deslizamientos y vuelcos).",
+    ),
+    "ley_invierno_lago": (
+        "Invierno: el lago está helado y no hay erosión.",
+        "De enero a marzo el lago está helado y no hay oleaje, así que el modelo salta esos "
+        "meses sin erosión (como en el código original).",
+    ),
+    "ley_invierno_mar": (
+        "Mes sin oleaje: ese mes no hay erosión.",
+        "Mes de una estación sin oleaje definido (pestaña «Oleaje»), así que el modelo lo "
+        "salta sin erosión.",
+    ),
+    "ley_derrubios": (
+        "El material caído protege el pie del acantilado durante un tiempo.",
+        "Tras una rotura, los derrubios quedan al pie del acantilado y lo protegen del "
+        "oleaje. El agua tarda volumen/M<sub>f</sub> días en llevárselos (M<sub>f</sub>: "
+        "coeficiente de movilidad, pestaña «Parámetros»); mientras tanto el modelo salta "
+        "esos meses sin erosión.",
+    ),
     # -------------------------------------------------------- otras pestanas
     "perfil": (
         "Puntos que definen la forma inicial del acantilado, de tierra (arriba) a lago "
