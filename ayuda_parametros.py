@@ -363,7 +363,8 @@ AYUDA = {
         "<b>Arena</b>: protección por derrubios. Tras una rotura, el material caído queda al "
         "pie del acantilado y el oleaje tarda volumen/M<sub>f</sub> días en llevárselo; "
         "mientras tanto el pie está protegido y el modelo salta esos meses sin erosión.<br>"
-        "<b>Rayas rojas</b>: meses con rotura (más altas si hay varias).<br>"
+        "<b>Rayas rojas</b>: meses con deslizamiento (más altas si hay varios).<br>"
+        "<b>Rayas ámbar</b>: meses con vuelco.<br>"
         "<b>Línea cian bajo la barra</b>: tramo ya recorrido.<br><br>"
         "Al pasar el ratón por la barra se ve qué ocurre en cada mes. Teclas: ← → (un "
         "mes), RePág/AvPág (un año), Inicio/Fin.",

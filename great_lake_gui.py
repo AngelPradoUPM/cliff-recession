@@ -1064,11 +1064,19 @@ class Ventana(QMainWindow):
         self.cb_vel.currentIndexChanged.connect(self._velocidad)
         fila.addWidget(self.cb_vel)
         fila.addStretch(1)
-        leyenda = QLabel(self._texto_leyenda())
-        self.lb_leyenda_linea = leyenda
-        leyenda.setStyleSheet("color: #c3cad5; font-size: 8pt;")
-        fila.addWidget(leyenda)
-        fila.addWidget(InfoBoton("linea_temporal"))
+        bl.addLayout(fila)
+        # leyenda: cada elemento explica qué significa al pasar el ratón por encima
+        fila = QHBoxLayout()
+        fila.setSpacing(14)
+        self._leyenda_linea = {}
+        for clave in ("deslizamiento", "vuelco", "erosion", "invierno", "derrubios"):
+            lb = QLabel()
+            lb.setStyleSheet("color: #c3cad5; font-size: 8pt;")
+            lb.setCursor(Qt.WhatsThisCursor)
+            fila.addWidget(lb)
+            self._leyenda_linea[clave] = lb
+        fila.addStretch(1)
+        self._actualizar_leyenda_linea()
         bl.addLayout(fila)
         self.linea = LineaTemporal()
         self.linea.valor_cambiado.connect(self._cambio_mes)
@@ -1867,7 +1875,8 @@ class Ventana(QMainWindow):
                 + (" · " + ", ".join(partes) if rot else "") + txt_nivel)
         else:
             self.lb_mes.setText(f"Mes 0 (perfil inicial) · arrastra la barra para ver la "
-                                f"evolución mes a mes hasta el mes {meta['tsim']}")
+                                f"evolución mes a mes hasta el mes {meta['tsim']} "
+                                f"(teclas ← → un mes, RePág/AvPág un año, Inicio/Fin)")
         if not redibujar:
             return
         lz = self.lienzo
@@ -2182,7 +2191,7 @@ class Ventana(QMainWindow):
         self.lb_nivel_barra.setText("Nivel del lago:" if modo == "lago" else "Nivel medio del mar:")
         self.grp_nivel_lago.setVisible(modo == "lago")
         self.grp_marea.setVisible(modo == "mar")
-        self.lb_leyenda_linea.setText(self._texto_leyenda())
+        self._actualizar_leyenda_linea()
         self._actualizar_titulo()
         self._cambio_estabilidad()
         self.tb_salidas.setHorizontalHeaderLabels(
@@ -2195,14 +2204,48 @@ class Ventana(QMainWindow):
         self.dibujar_perfil()
         self._cambio_opciones_nivel()
 
-    def _texto_leyenda(self):
-        inv = "invierno: lago helado" if getattr(self, "modo", "lago") == "lago" else "sin oleaje"
-        return (f'<span style="color:{COLOR_ROTURA}">┃</span> deslizamiento &nbsp; '
-                f'<span style="color:{COLOR_VUELCO}">╻</span> vuelco &nbsp;&nbsp; '
-                f'<span style="color:{COLOR_MES_CALCULADO}; background:{COLOR_MES_CALCULADO}">'
-                f'&nbsp;&nbsp;&nbsp;</span> mes con erosión &nbsp;&nbsp; '
-                f'<span style="color:{COLOR_INVIERNO}">█</span> {inv} &nbsp;&nbsp; '
-                f'<span style="color:{COLOR_DERRUBIOS}">█</span> pie protegido por derrubios')
+    def _actualizar_leyenda_linea(self):
+        lago = getattr(self, "modo", "lago") == "lago"
+        cuadro = ('<span style="color:{c}; background:{c}">&nbsp;&nbsp;&nbsp;</span>')
+        textos = {
+            "deslizamiento": (
+                f'<span style="color:{COLOR_ROTURA}">┃</span> deslizamiento',
+                "<b>Deslizamiento</b><br>Rotura circular: una masa de terreno desliza a lo "
+                "largo de una superficie curva porque su factor de seguridad ha bajado de 1. "
+                "La raya roja marca el mes en que ocurre (más alta si hay varias ese mes). "
+                "El volumen y el factor de seguridad de cada una están en la pestaña "
+                "«Roturas»."),
+            "vuelco": (
+                f'<span style="color:{COLOR_VUELCO}">╻</span> vuelco',
+                "<b>Vuelco</b><br>El oleaje excava una muesca en el pie y el bloque de encima "
+                "queda en voladizo. Cuando la tensión de tracción que provoca su peso supera "
+                "la resistencia del terreno, el bloque se parte y cae. La raya ámbar marca el "
+                "mes en que ocurre."),
+            "erosion": (
+                cuadro.format(c=COLOR_MES_CALCULADO) + " mes con erosión",
+                "<b>Mes con erosión</b><br>Mes calculado normalmente: el oleaje ataca el pie "
+                "del acantilado y lo va erosionando, y se comprueba si se produce alguna "
+                "rotura."),
+            "invierno": (
+                (f'<span style="color:{COLOR_INVIERNO}">█</span> '
+                 + ("invierno: lago helado" if lago else "sin oleaje")),
+                ("<b>Invierno: lago helado</b><br>De enero a marzo el lago está helado y no "
+                 "hay oleaje, así que el modelo salta esos meses sin erosión."
+                 if lago else
+                 "<b>Sin oleaje</b><br>Mes de una estación sin oleaje definido (pestaña "
+                 "«Oleaje»): ese mes no hay erosión.")),
+            "derrubios": (
+                f'<span style="color:{COLOR_DERRUBIOS}">█</span> pie protegido por derrubios',
+                "<b>Pie protegido por derrubios</b><br>Tras una rotura, el material caído "
+                "queda al pie del acantilado y lo protege del oleaje. El agua tarda "
+                "volumen/M<sub>f</sub> días en llevárselo (M<sub>f</sub>: coeficiente de "
+                "movilidad, pestaña «Parámetros»); mientras tanto el modelo salta esos "
+                "meses sin erosión."),
+        }
+        for clave, (txt, ayuda) in textos.items():
+            lb = self._leyenda_linea[clave]
+            lb.setText(txt)
+            lb.setToolTip(f"<div style='max-width: 320px'>{ayuda}</div>")
 
     def _actualizar_titulo(self):
         modo = "lago" if self.modo == "lago" else "mar"
