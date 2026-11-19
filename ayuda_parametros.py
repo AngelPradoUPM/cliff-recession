@@ -286,7 +286,12 @@ AYUDA = {
         "seleccionar una fila, ese cálculo se muestra en las demás vistas: perfil, línea "
         "temporal, roturas y gráficas. La gráfica superpone, para todos los cálculos, el "
         "retroceso en el tiempo, el volumen de roturas acumulado o el perfil final. Cada "
-        "cálculo guarda sus ficheros en su propia subcarpeta de «resultados».",
+        "cálculo guarda sus ficheros en su propia subcarpeta de «resultados». También "
+        "puedes elegir el cálculo con el selector «Cálculo mostrado» (encima del perfil y "
+        "en la pestaña «Recesión»); todas las vistas usan los mismos ejes para cualquier "
+        "cálculo, y un zoom hecho a mano se conserva al cambiar de uno a otro. En todas "
+        "las gráficas, al pasar el ratón por una curva se indica cuál es, y sobre un "
+        "punto, sus coordenadas.",
     ),
     # ------------------------------------------------------------ modo / mar
     "modo": (

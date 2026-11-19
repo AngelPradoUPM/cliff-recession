@@ -30,13 +30,14 @@ import time
 
 import numpy as np
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QBrush, QColor, QFont, QPainter, QPen
+from PySide6.QtGui import (QAction, QActionGroup, QBrush, QColor, QCursor, QFont, QPainter,
+                           QPen)
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDockWidget,
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QMainWindow, QMenu, QMessageBox, QProgressBar,
     QPushButton, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem,
-    QTabWidget, QToolButton, QVBoxLayout, QWidget,
+    QTabWidget, QToolButton, QToolTip, QVBoxLayout, QWidget,
 )
 
 import matplotlib
@@ -45,6 +46,7 @@ import matplotlib.cm  # noqa: E402
 import matplotlib.colors  # noqa: E402
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas  # noqa: E402
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT  # noqa: E402
+from matplotlib.cbook import STEP_LOOKUP_MAP  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -253,6 +255,89 @@ class Lienzo(FigureCanvas):
         self.oscuro = oscuro
         self.ax = self.fig.add_subplot(111)
         self.estilo()
+        self.mpl_connect("motion_notify_event", self._al_mover)
+        self.mpl_connect("figure_leave_event", lambda _e: self._ocultar_info())
+        self._tip = None
+
+    # Al pasar el raton: nombre de la curva y, sobre un punto, sus coordenadas.
+    # El nombre es el gid de la linea o, si no tiene, su etiqueta de leyenda.
+    TOL_PUNTO = 6.0   # px
+    TOL_CURVA = 5.0   # px
+
+    def _ocultar_info(self):
+        if self._tip is not None:
+            QToolTip.hideText()
+            self._tip = None
+
+    @staticmethod
+    def _nombre(artista):
+        n = artista.get_gid() or artista.get_label() or ""
+        return "" if n.startswith("_") else n
+
+    @staticmethod
+    def _coordenadas(ax, x, y):
+        return (f"{ax.get_xlabel() or 'x'}: {x:.2f}\n"
+                f"{ax.get_ylabel() or 'y'}: {y:.2f}")
+
+    def _info_en(self, ev):
+        ax = ev.inaxes
+        if ax is None:
+            return None
+        p = np.array([ev.x, ev.y])
+        mejor_pto = mejor_curva = None
+        for ln in ax.get_lines():
+            if not ln.get_visible() or ln.get_animated():
+                continue
+            xy = np.asarray(ln.get_xydata(), dtype=float)
+            if xy.ndim != 2 or len(xy) == 0:
+                continue
+            ds = ln.get_drawstyle() or "default"
+            if ds.startswith("steps") and ds in STEP_LOOKUP_MAP and len(xy) > 1:
+                sx, sy = STEP_LOOKUP_MAP[ds](xy[:, 0], xy[:, 1])
+                xy = np.column_stack([sx, sy])
+            pix = ln.get_transform().transform(xy)
+            pix = pix[np.all(np.isfinite(pix), axis=1)]
+            if len(pix) == 0:
+                continue
+            d = np.hypot(*(pix - p).T)
+            i = int(np.argmin(d))
+            if d[i] <= self.TOL_PUNTO and (mejor_pto is None or d[i] < mejor_pto[0]):
+                mejor_pto = (d[i], ln, pix[i])
+            if len(pix) > 1 and ln.get_linestyle() not in ("None", "", " "):
+                a, b = pix[:-1], pix[1:]
+                ab = b - a
+                l2 = np.einsum("ij,ij->i", ab, ab)
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    t = np.where(l2 > 0, np.einsum("ij,ij->i", p - a, ab) / l2, 0.0)
+                t = np.clip(t, 0, 1)
+                dc = np.hypot(*(a + t[:, None] * ab - p).T)
+                j = int(np.argmin(dc))
+                if dc[j] <= self.TOL_CURVA and (mejor_curva is None or dc[j] < mejor_curva[0]):
+                    mejor_curva = (dc[j], ln)
+        if mejor_pto is not None:
+            _, ln, px = mejor_pto
+            x, y = ax.transData.inverted().transform(px)
+            nombre = self._nombre(ln)
+            return (nombre + "\n" if nombre else "") + self._coordenadas(ax, x, y)
+        if mejor_curva is not None and self._nombre(mejor_curva[1]):
+            return self._nombre(mejor_curva[1])
+        for pa in ax.patches:          # barras (oleaje)
+            if pa.get_visible() and hasattr(pa, "get_height") and pa.contains(ev)[0]:
+                n = self._nombre(pa)
+                return ((n + "\n" if n else "")
+                        + f"{ax.get_ylabel() or 'valor'}: {pa.get_height():g}")
+        return None
+
+    def _al_mover(self, ev):
+        try:
+            texto = self._info_en(ev)
+        except Exception:  # noqa: BLE001  (un tooltip nunca debe romper la interfaz)
+            texto = None
+        if texto is None:
+            self._ocultar_info()
+            return
+        QToolTip.showText(QCursor.pos(), texto, self)
+        self._tip = texto
 
     def estilo(self):
         ax = self.ax
@@ -562,6 +647,8 @@ class Ventana(QMainWindow):
         self.modo = "lago"
         self._eventos = []
         self.resultados = []
+        self._selectores = []      # (fila, combo) que eligen el calculo mostrado
+        self._lim_auto = None      # encuadre automatico del perfil (para conservar el zoom)
         self.seasons_por_modo = {"lago": copy.deepcopy(gl.SEASONS),
                                  "mar": copy.deepcopy(gl.SEASONS_MAR)}
         self._bloqueo = False
@@ -882,6 +969,7 @@ class Ventana(QMainWindow):
         self.cb_resultado.currentIndexChanged.connect(self._elegir_resultado)
         fr.addWidget(self.cb_resultado, 1)
         self.fila_resultado.setVisible(False)
+        self._selectores.append((self.fila_resultado, self.cb_resultado))
         v.addWidget(self.fila_resultado)
         fila = QHBoxLayout()
         b_todos = QPushButton("Ver todos")
@@ -935,7 +1023,9 @@ class Ventana(QMainWindow):
         self.lienzo.mpl_connect("draw_event", self._on_draw)
         nav = NavigationToolbar2QT(self.lienzo, w)
         nav.setStyleSheet("background: #e9e9e9; border: none;")
+        self.nav = nav
         v.addWidget(nav)
+        v.addWidget(self._fila_selector(oscuro=True))
         v.addWidget(self.lienzo, 1)
 
         barra = QWidget()
@@ -1010,6 +1100,7 @@ class Ventana(QMainWindow):
                                   "Volumen de roturas acumulado (deslizamientos + vuelcos)"])
         self.cb_grafica.currentIndexChanged.connect(self.dibujar_grafica)
         fila.addWidget(self.cb_grafica, 1)
+        v.addWidget(self._fila_selector())
         v.addLayout(fila)
         self.graf = Lienzo()
         v.addWidget(self.graf, 1)
@@ -1375,6 +1466,13 @@ class Ventana(QMainWindow):
 
     def dibujar_perfil(self, *_):
         lz = self.lienzo
+        # si el usuario ha hecho zoom y el encuadre automatico no cambia (p. ej. al
+        # pasar de un calculo a otro), se conserva su zoom
+        zoom = None
+        if self._lim_auto is not None and lz.fig.axes:
+            actual = (tuple(lz.ax.get_xlim()), tuple(lz.ax.get_ylim()))
+            if not np.allclose(np.array(actual), np.array(self._lim_auto)):
+                zoom = actual
         lz.fig.clf()
         lz.ax = lz.fig.add_subplot(111)
         ax = lz.ax
@@ -1383,6 +1481,7 @@ class Ventana(QMainWindow):
         if d is None or g is None:
             ax.text(0.5, 0.5, "Perfil no válido", transform=ax.transAxes, ha="center",
                     color=CANVAS_FG)
+            self._lim_auto = None
             lz.draw_idle()
             return
         N = g["N"]
@@ -1432,7 +1531,7 @@ class Ventana(QMainWindow):
                        label=f"Nivel del lago ({zlago:.2f} m)")
         ax.plot(y0, z, color="#f0f0f0", lw=1.8, zorder=4, label="Perfil inicial (año 0, datos)")
         ax.plot([p[1] for p in d["Pzy"]], [p[0] for p in d["Pzy"]], "o", ms=3.5,
-                color="#bbbbbb", alpha=0.8, label="_vertices")
+                color="#bbbbbb", alpha=0.8, label="_vertices", gid="Vértice del perfil (datos)")
 
         # Nivel freatico
         if d["groundwater"] == 1:
@@ -1471,7 +1570,8 @@ class Ventana(QMainWindow):
                 if ano <= 0:
                     continue
                 ln, = ax.plot(Dib[2:N + 2, k], z, color=cmap(norm(ano)), lw=1.2,
-                              alpha=0.22 if modo_mes else (0.3 if sel else 1.0))
+                              alpha=0.22 if modo_mes else (0.3 if sel else 1.0),
+                              gid=f"Perfil del año {ano:g} (mes {Dib[1, k]:.0f})")
                 self._lineas_tenues.append(ln)
             if cols:
                 sm = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
@@ -1525,11 +1625,22 @@ class Ventana(QMainWindow):
         else:
             ax.set_xlim(ymin, ymax)
             ax.set_ylim(zmin, zmax + 0.05 * (zmax - zmin))
+        lim_auto = (tuple(ax.get_xlim()), tuple(ax.get_ylim()))
+        if self._lim_auto is None or not np.allclose(np.array(lim_auto), np.array(self._lim_auto)):
+            zoom = None
+        self._lim_auto = lim_auto
         if self.ck_leyenda.isChecked():
             leg = ax.legend(loc="best", fontsize=7.5, facecolor="#2f3540",
                             edgecolor="#5a6270", labelcolor=CANVAS_FG)
             leg.set_draggable(True)
         lz.fig.tight_layout()
+        if hasattr(self, "nav"):
+            self.nav.update()
+            self.nav.push_current()
+            if zoom is not None:
+                ax.set_xlim(zoom[0])
+                ax.set_ylim(zoom[1])
+                self.nav.push_current()
         if hay_res:
             self._linea_mes, = ax.plot(y0, z, color="#00e5ff", lw=2.6, zorder=6, visible=False,
                                        animated=True)
@@ -1547,9 +1658,9 @@ class Ventana(QMainWindow):
         lz.draw_idle()
 
     # --------------------------------------------------------- resultados
-    def _series(self):
+    def _series(self, r=None):
         """Series temporales a partir de los perfiles de salida."""
-        r = self.res
+        r = self.res if r is None else r
         N = r["meta"]["N"]
         Dib = r["DibMatriz"]
         P0 = r["profile_inicial"]
@@ -1795,11 +1906,14 @@ class Ventana(QMainWindow):
         meses, lago, cresta, estudio, _ = self._series()
         anos = meses / 12.0
         modo = self.cb_grafica.currentIndex()
+        nombre_calc = next((x["nombre"] for x in self.resultados if x["res"] is self.res), "")
         if modo == 0:
-            ax.plot(anos, lago, "-o", color=ACCENT, ms=3.5)
+            ax.plot(anos, lago, "-o", color=ACCENT, ms=3.5,
+                    gid=f"Retroceso en el nivel del agua · {nombre_calc}".strip(" ·"))
             ax.set_ylabel("Retroceso en el nivel del lago (m)")
         elif modo == 1:
-            ax.plot(anos, cresta, "-o", color=ACCENT, ms=3.5)
+            ax.plot(anos, cresta, "-o", color=ACCENT, ms=3.5,
+                    gid=f"Retroceso de la cresta · {nombre_calc}".strip(" ·"))
             ax.set_ylabel("Retroceso de la cresta (m)")
         elif modo == 2:
             if not estudio:
@@ -1829,8 +1943,37 @@ class Ventana(QMainWindow):
                         transform=ax.transAxes, ha="center", color="#888")
             ax.set_ylabel("Volumen acumulado (m³/m)")
         ax.set_xlabel("Tiempo (años)")
+        self._limites_comunes_recesion(ax, modo)
         lz.fig.tight_layout()
         lz.draw_idle()
+
+    def _limites_comunes_recesion(self, ax, modo):
+        """Mismos ejes para todos los cálculos, para poder compararlos al cambiar."""
+        if len(self.resultados) < 2:
+            return
+        vals, tmax = [0.0], 0.0
+        for x in self.resultados:
+            r_ = x["res"]
+            if r_["meta"]["N"] != self.res["meta"]["N"]:
+                return
+            tmax = max(tmax, r_["meta"]["tsim"] / 12.0)
+            _, l_, c_, e_, _ = self._series(r_)
+            if modo == 0:
+                vals.extend(l_)
+            elif modo == 1:
+                vals.extend(c_)
+            elif modo == 2:
+                for s_ in e_:
+                    vals.extend(s_)
+            else:
+                vals.append(sum(v for _, v, *_ in r_["roturas"])
+                            + sum(v for _, v, *_ in r_.get("vuelcos", [])))
+        vals = np.asarray(vals, dtype=float)
+        vals = vals[np.isfinite(vals)]
+        lo, hi = float(vals.min()), float(vals.max())
+        m = 0.05 * (hi - lo or 1.0)
+        ax.set_ylim(lo - m, hi + m)
+        ax.set_xlim(-0.03 * tmax, 1.03 * tmax)
 
     # ------------------------------------------------------------- oleaje
     def _clave_estacion(self):
@@ -2373,6 +2516,7 @@ class Ventana(QMainWindow):
             self.cb_resultado.clear()
             self.cb_resultado.blockSignals(False)
             self.fila_resultado.setVisible(False)
+            self._sincronizar_selectores()
             self.tb_comp.setRowCount(0)
             self.dibujar_comparacion()
         self._activar_linea(False)
@@ -2464,7 +2608,9 @@ class Ventana(QMainWindow):
             self.cb_resultado.addItem(r["nombre"])
         self.cb_resultado.blockSignals(False)
         self.fila_resultado.setVisible(len(resultados) > 1)
+        self._lim_auto = None
         self.res = resultados[0]["res"]
+        self._sincronizar_selectores()
         self.res_dir_actual = resultados[0]["dir"]
         self.lb_resdir.setText(f"Resultados guardados en: {self.res_dir}")
         self.mostrar_resultados()
@@ -2486,9 +2632,48 @@ class Ventana(QMainWindow):
                 f"{self.res.get('modo', 'lago')} · {txt_est} · compáralos en la pestaña "
                 f"«Comparación» · salidas en {self.res_dir}")
 
+    def _fila_selector(self, oscuro=False):
+        """Fila «Cálculo mostrado» sincronizada con el selector de la pestaña Resultados."""
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(8, 4, 8, 2) if oscuro else h.setContentsMargins(0, 0, 0, 0)
+        lb = QLabel("Cálculo mostrado:")
+        if oscuro:
+            lb.setStyleSheet(f"color: {CANVAS_FG}; font-weight: bold;")
+        cb = QComboBox()
+        if oscuro:
+            cb.setStyleSheet("QComboBox { background: #f2f2f2; color: #111; padding: 2px 6px; }"
+                             "QComboBox QAbstractItemView { background: white; color: #111; }")
+        cb.currentIndexChanged.connect(self._selector_cambiado)
+        h.addWidget(lb)
+        h.addWidget(cb, 1)
+        if oscuro:
+            h.addStretch(2)
+        w.setVisible(False)
+        self._selectores.append((w, cb))
+        return w
+
+    def _selector_cambiado(self, i):
+        if i >= 0 and i != self.cb_resultado.currentIndex():
+            self.cb_resultado.setCurrentIndex(i)
+
+    def _sincronizar_selectores(self):
+        nombres = [r["nombre"] for r in self.resultados]
+        i = self.cb_resultado.currentIndex()
+        for w, cb in self._selectores:
+            if cb is not self.cb_resultado:
+                cb.blockSignals(True)
+                if [cb.itemText(k) for k in range(cb.count())] != nombres:
+                    cb.clear()
+                    cb.addItems(nombres)
+                cb.setCurrentIndex(i)
+                cb.blockSignals(False)
+            w.setVisible(len(nombres) > 1)
+
     def _elegir_resultado(self, i):
         if 0 <= i < len(getattr(self, "resultados", [])):
             self.res = self.resultados[i]["res"]
+            self._sincronizar_selectores()
             self.tb_roturas.clearSelection()
             self.mostrar_resultados()
             self.dibujar_nivel()
