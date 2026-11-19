@@ -1088,7 +1088,7 @@ class Ventana(QMainWindow):
         self._leyenda_linea = {}
         for clave in ("deslizamiento", "vuelco", "erosion", "invierno", "derrubios"):
             lb = EtiquetaAyuda()
-            lb.setStyleSheet("color: #c3cad5; font-size: 8pt;")
+            lb.setStyleSheet("color: #d3d9e2; font-size: 9.5pt;")
             lb.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
             fila.addSpacing(6)
             fila.addWidget(lb)
