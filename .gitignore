@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 resultados/
+
+# Datos locales: se quedan en el PC y no se suben a GitHub
+MEPDC - III/
