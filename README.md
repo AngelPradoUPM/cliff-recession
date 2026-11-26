@@ -9,6 +9,7 @@ marea (lago Erie), de R. Castedo (UPM). La tesis doctoral relacionada está en
 | Fichero | Descripción |
 |---|---|
 | `Great_lake_v.1.f90` | Código original en Fortran (Intel Visual Fortran). |
+| `Cliff_erosion_4.1.f90` | Código original de Castedo y Paredes para costas marinas (2009–2011, Intel Fortran): modelo estadístico y modelo proceso-respuesta de los cap. 8–9 de la tesis. Solo como referencia; no está traducido. |
 | `great_lake.py` | Traducción **fiel** a Python del código Fortran: da exactamente los mismos resultados. No tiene opciones nuevas. |
 | `great_lake_motor.py` | Motor de la herramienta: `great_lake.py` más opciones que no están en el original (nivel del lago variable, Bishop/Spencer, nº de rebanadas, criterio de rotura). Con las opciones por defecto da lo mismo que `great_lake.py`. |
 | `great_lake_gui.py` | Herramienta gráfica de escritorio sobre `great_lake_motor.py`. |
